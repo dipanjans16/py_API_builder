@@ -8,6 +8,8 @@ import { VSCodeButton } from "@vscode/webview-ui-toolkit/react"
 import useSound from "use-sound"
 import { LRUCache } from "lru-cache"
 
+import { useDebounceEffect } from "@src/utils/useDebounceEffect"
+
 import type { ClineAsk, ClineMessage } from "@roo-code/types"
 
 import { ClineSayBrowserAction, ClineSayTool, ExtensionMessage } from "@roo/ExtensionMessage"
@@ -26,6 +28,7 @@ import { buildDocLink } from "@src/utils/docLinks"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
 import { useSelectedModel } from "@src/components/ui/hooks/useSelectedModel"
+import { StandardTooltip } from "@src/components/ui"
 
 import { useTaskSearch } from "../history/useTaskSearch"
 import HistoryPreview from "../history/HistoryPreview"
@@ -79,6 +82,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		alwaysAllowReadOnlyOutsideWorkspace,
 		alwaysAllowWrite,
 		alwaysAllowWriteOutsideWorkspace,
+		alwaysAllowWriteProtected,
 		alwaysAllowExecute,
 		alwaysAllowMcp,
 		allowedCommands,
@@ -153,6 +157,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			ttl: 1000 * 60 * 15, // 15 minutes TTL for long-running tasks
 		}),
 	)
+	const autoApproveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
 	const clineAskRef = useRef(clineAsk)
 	useEffect(() => {
@@ -427,6 +432,12 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		setExpandedRows({})
 		everVisibleMessagesTsRef.current.clear() // Clear for new task
 	}, [task?.ts])
+
+	useEffect(() => {
+		if (isHidden) {
+			everVisibleMessagesTsRef.current.clear()
+		}
+	}, [isHidden])
 
 	useEffect(() => () => everVisibleMessagesTsRef.current.clear(), [])
 
@@ -751,17 +762,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	// NOTE: the VSCode window needs to be focused for this to work.
 	useMount(() => textAreaRef.current?.focus())
 
-	useEffect(() => {
-		const timer = setTimeout(() => {
+	useDebounceEffect(
+		() => {
 			if (!isHidden && !sendingDisabled && !enableButtons) {
 				textAreaRef.current?.focus()
 			}
-		}, 50)
-
-		return () => {
-			clearTimeout(timer)
-		}
-	}, [isHidden, sendingDisabled, enableButtons])
+		},
+		50,
+		[isHidden, sendingDisabled, enableButtons],
+	)
 
 	const visibleMessages = useMemo(() => {
 		const newVisibleMessages = modifiedMessages.filter((message) => {
@@ -895,7 +904,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	const isAllowedCommand = useCallback(
 		(message: ClineMessage | undefined): boolean => {
 			if (message?.type !== "ask") return false
-			return validateCommand(message.text || "", allowedCommands || [])
+			// kilocode_change start wrap in try/catch
+			try {
+				return validateCommand(message.text || "", allowedCommands || [])
+			} catch (e) {
+				// shell-quote sometimes throws a "Bad substitution" error
+				console.error("Cannot validate command, auto-approve denied.", e)
+				return false
+			}
+			// kilocode_change end
 		},
 		[allowedCommands],
 	)
@@ -952,13 +969,18 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				}
 
 				const isOutsideWorkspace = !!tool.isOutsideWorkspace
+				const isProtected = message.isProtected
 
 				if (isReadOnlyToolAction(message)) {
 					return alwaysAllowReadOnly && (!isOutsideWorkspace || alwaysAllowReadOnlyOutsideWorkspace)
 				}
 
 				if (isWriteToolAction(message)) {
-					return alwaysAllowWrite && (!isOutsideWorkspace || alwaysAllowWriteOutsideWorkspace)
+					return (
+						alwaysAllowWrite &&
+						(!isOutsideWorkspace || alwaysAllowWriteOutsideWorkspace) &&
+						(!isProtected || alwaysAllowWriteProtected)
+					)
 				}
 			}
 
@@ -972,6 +994,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			isReadOnlyToolAction,
 			alwaysAllowWrite,
 			alwaysAllowWriteOutsideWorkspace,
+			alwaysAllowWriteProtected,
 			isWriteToolAction,
 			alwaysAllowExecute,
 			isAllowedCommand,
@@ -1117,12 +1140,34 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		[],
 	)
 
+	useEffect(() => {
+		return () => {
+			if (scrollToBottomSmooth && typeof (scrollToBottomSmooth as any).cancel === "function") {
+				;(scrollToBottomSmooth as any).cancel()
+			}
+		}
+	}, [scrollToBottomSmooth])
+
 	const scrollToBottomAuto = useCallback(() => {
 		virtuosoRef.current?.scrollTo({
 			top: Number.MAX_SAFE_INTEGER,
 			behavior: "auto", // Instant causes crash.
 		})
 	}, [])
+
+	// kilocode_change start
+	// Animated "blink" to highlight a specific message. Used by the TaskTimeline
+	const highlightClearTimerRef = useRef<NodeJS.Timeout | undefined>()
+	const [highlightedMessageIndex, setHighlightedMessageIndex] = useState<number | null>(null)
+	const handleMessageClick = useCallback((index: number) => {
+		setHighlightedMessageIndex(index)
+		virtuosoRef.current?.scrollToIndex({ index, align: "end", behavior: "smooth" })
+
+		// Clear the highlight after a delay
+		clearTimeout(highlightClearTimerRef.current)
+		highlightClearTimerRef.current = setTimeout(() => setHighlightedMessageIndex(null), 1000)
+	}, [])
+	// kilocode_change end
 
 	const handleSetExpandedRow = useCallback(
 		(ts: number, expand?: boolean) => {
@@ -1155,13 +1200,13 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	)
 
 	useEffect(() => {
-		let timerId: NodeJS.Timeout | undefined
+		let timer: NodeJS.Timeout | undefined
 		if (!disableAutoScrollRef.current) {
-			timerId = setTimeout(() => scrollToBottomSmooth(), 50)
+			timer = setTimeout(() => scrollToBottomSmooth(), 50)
 		}
 		return () => {
-			if (timerId) {
-				clearTimeout(timerId)
+			if (timer) {
+				clearTimeout(timer)
 			}
 		}
 	}, [groupedMessages.length, scrollToBottomSmooth])
@@ -1182,21 +1227,23 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 	// Effect to handle showing the checkpoint warning after a delay
 	useEffect(() => {
 		// Only show the warning when there's a task but no visible messages yet
-		if (task && modifiedMessages.length === 0 && !isStreaming) {
+		if (task && modifiedMessages.length === 0 && !isStreaming && !isHidden) {
 			const timer = setTimeout(() => {
 				setShowCheckpointWarning(true)
 			}, 5000) // 5 seconds
 
 			return () => clearTimeout(timer)
+		} else {
+			setShowCheckpointWarning(false)
 		}
-	}, [task, modifiedMessages.length, isStreaming])
+	}, [task, modifiedMessages.length, isStreaming, isHidden])
 
 	// Effect to hide the checkpoint warning when messages appear
 	useEffect(() => {
-		if (modifiedMessages.length > 0 || isStreaming) {
+		if (modifiedMessages.length > 0 || isStreaming || isHidden) {
 			setShowCheckpointWarning(false)
 		}
-	}, [modifiedMessages.length, isStreaming])
+	}, [modifiedMessages.length, isStreaming, isHidden])
 
 	const placeholderText = task ? t("chat:typeMessage") : t("chat:typeTask")
 
@@ -1254,6 +1301,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					isStreaming={isStreaming}
 					onSuggestionClick={handleSuggestionClickInRow} // This was already stabilized
 					onBatchFileResponse={handleBatchFileResponse}
+					highlighted={highlightedMessageIndex === index} // kilocode_change: add highlight prop
 				/>
 			)
 		},
@@ -1266,35 +1314,31 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			isStreaming,
 			handleSuggestionClickInRow,
 			handleBatchFileResponse,
+			highlightedMessageIndex, // kilocode_change: add highlightedMessageIndex
 		],
 	)
 
 	useEffect(() => {
-		// Only proceed if we have an ask and buttons are enabled.
+		if (autoApproveTimeoutRef.current) {
+			clearTimeout(autoApproveTimeoutRef.current)
+			autoApproveTimeoutRef.current = null
+		}
+
 		if (!clineAsk || !enableButtons) {
 			return
 		}
 
 		const autoApprove = async () => {
 			if (lastMessage?.ask && isAutoApproved(lastMessage)) {
-				// Note that `isAutoApproved` can only return true if
-				// lastMessage is an ask of type "browser_action_launch",
-				// "use_mcp_server", "command", or "tool".
-
-				// Add delay for write operations.
 				if (lastMessage.ask === "tool" && isWriteToolAction(lastMessage)) {
-					await new Promise((resolve) => setTimeout(resolve, writeDelayMs))
-					if (!isMountedRef.current) {
-						return
-					}
+					await new Promise<void>((resolve) => {
+						autoApproveTimeoutRef.current = setTimeout(resolve, writeDelayMs)
+					})
 				}
 
-				vscode.postMessage({ type: "askResponse", askResponse: "yesButtonClicked" })
+				if (autoApproveTimeoutRef.current === null || autoApproveTimeoutRef.current) {
+					vscode.postMessage({ type: "askResponse", askResponse: "yesButtonClicked" })
 
-				// This is copied from `handlePrimaryButtonClick`, which we used
-				// to call from `autoApprove`. I'm not sure how many of these
-				// things are actually needed.
-				if (isMountedRef.current) {
 					setSendingDisabled(true)
 					setClineAsk(undefined)
 					setEnableButtons(false)
@@ -1302,6 +1346,13 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			}
 		}
 		autoApprove()
+
+		return () => {
+			if (autoApproveTimeoutRef.current) {
+				clearTimeout(autoApproveTimeoutRef.current)
+				autoApproveTimeoutRef.current = null
+			}
+		}
 	}, [
 		clineAsk,
 		enableButtons,
@@ -1390,7 +1441,6 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						task={task}
 						tokensIn={apiMetrics.totalTokensIn}
 						tokensOut={apiMetrics.totalTokensOut}
-						doesModelSupportPromptCache={model?.supportsPromptCache ?? false}
 						cacheWrites={apiMetrics.totalCacheWrites}
 						cacheReads={apiMetrics.totalCacheReads}
 						totalCost={apiMetrics.totalCost}
@@ -1398,6 +1448,11 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 						buttonsDisabled={sendingDisabled}
 						handleCondenseContext={handleCondenseContext}
 						onClose={handleTaskCloseButtonClick}
+						// kilocode_change start
+						groupedMessages={groupedMessages}
+						onMessageClick={handleMessageClick}
+						isTaskActive={sendingDisabled}
+						// kilocode_change end
 					/>
 
 					{hasSystemPromptOverride && (
@@ -1497,15 +1552,16 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 					{showAutoApproveMenu && <AutoApproveMenu />}
 					{showScrollToBottom ? (
 						<div className="flex px-[15px] pt-[10px]">
-							<div
-								className="bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_55%,_transparent)] rounded-[3px] overflow-hidden cursor-pointer flex justify-center items-center flex-1 h-[25px] hover:bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_90%,_transparent)] active:bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_70%,_transparent)]"
-								onClick={() => {
-									scrollToBottomSmooth()
-									disableAutoScrollRef.current = false
-								}}
-								title={t("chat:scrollToBottom")}>
-								<span className="codicon codicon-chevron-down text-[18px]"></span>
-							</div>
+							<StandardTooltip content={t("chat:scrollToBottom")}>
+								<div
+									className="bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_55%,_transparent)] rounded-[3px] overflow-hidden cursor-pointer flex justify-center items-center flex-1 h-[25px] hover:bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_90%,_transparent)] active:bg-[color-mix(in_srgb,_var(--vscode-toolbar-hoverBackground)_70%,_transparent)]"
+									onClick={() => {
+										scrollToBottomSmooth()
+										disableAutoScrollRef.current = false
+									}}>
+									<span className="codicon codicon-chevron-down text-[18px]"></span>
+								</div>
+							</StandardTooltip>
 						</div>
 					) : (
 						<div
@@ -1519,11 +1575,8 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 									: "opacity-0"
 							}`}>
 							{primaryButtonText && !isStreaming && (
-								<VSCodeButton
-									appearance="primary"
-									disabled={!enableButtons}
-									className={secondaryButtonText ? "flex-1 mr-[6px]" : "flex-[2] mr-0"}
-									title={
+								<StandardTooltip
+									content={
 										primaryButtonText === t("chat:retry.title")
 											? t("chat:retry.tooltip")
 											: primaryButtonText === t("chat:save.title")
@@ -1542,17 +1595,19 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 																		  t("chat:proceedWhileRunning.title")
 																		? t("chat:proceedWhileRunning.tooltip")
 																		: undefined
-									}
-									onClick={() => handlePrimaryButtonClick(inputValue, selectedImages)}>
-									{primaryButtonText}
-								</VSCodeButton>
+									}>
+									<VSCodeButton
+										appearance="primary"
+										disabled={!enableButtons}
+										className={secondaryButtonText ? "flex-1 mr-[6px]" : "flex-[2] mr-0"}
+										onClick={() => handlePrimaryButtonClick(inputValue, selectedImages)}>
+										{primaryButtonText}
+									</VSCodeButton>
+								</StandardTooltip>
 							)}
 							{(secondaryButtonText || isStreaming) && (
-								<VSCodeButton
-									appearance="secondary"
-									disabled={!enableButtons && !(isStreaming && !didClickCancel)}
-									className={isStreaming ? "flex-[2] ml-0" : "flex-1 ml-[6px]"}
-									title={
+								<StandardTooltip
+									content={
 										isStreaming
 											? t("chat:cancel.tooltip")
 											: secondaryButtonText === t("chat:startNewTask.title")
@@ -1562,10 +1617,15 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 													: secondaryButtonText === t("chat:terminate.title")
 														? t("chat:terminate.tooltip")
 														: undefined
-									}
-									onClick={() => handleSecondaryButtonClick(inputValue, selectedImages)}>
-									{isStreaming ? t("chat:cancel.title") : secondaryButtonText}
-								</VSCodeButton>
+									}>
+									<VSCodeButton
+										appearance="secondary"
+										disabled={!enableButtons && !(isStreaming && !didClickCancel)}
+										className={isStreaming ? "flex-[2] ml-0" : "flex-1 ml-[6px]"}
+										onClick={() => handleSecondaryButtonClick(inputValue, selectedImages)}>
+										{isStreaming ? t("chat:cancel.title") : secondaryButtonText}
+									</VSCodeButton>
+								</StandardTooltip>
 							)}
 						</div>
 					)}
@@ -1593,7 +1653,9 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 				setMode={setMode}
 				modeShortcutText={modeShortcutText}
 			/>
-			<BottomControls />
+			{/* kilocode_change: added settings toggle the profile and model selection */}
+			<BottomControls showApiConfig />
+			{/* kilocode_change: end */}
 
 			{/* kilocode_change: disable {isProfileDisabled && (
 				<div className="px-3">

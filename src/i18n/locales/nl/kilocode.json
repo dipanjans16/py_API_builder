@@ -6,6 +6,7 @@
 		"title": "Waarschuwing: laag krediet!",
 		"message": "Controleer of je kunt opwaarderen met gratis credits of meer kunt kopen!"
 	},
+	"notLoggedInError": "Kan verzoek niet voltooien, zorg ervoor dat je verbonden bent en ingelogd met de geselecteerde provider.",
 	"rules": {
 		"actions": {
 			"delete": "Verwijderen",
@@ -46,5 +47,10 @@
 		"tokenRequired": "Kilo Code token is vereist voor het genereren van commit berichten",
 		"activationFailed": "Kilo: Kon berichtverstrekker voor commits niet activeren: {{error}}",
 		"providerRegistered": "Kilo: Commit message provider geregistreerd"
+	},
+	"userFeedback": {
+		"message_update_failed": "Bijwerken van bericht mislukt",
+		"no_checkpoint_found": "Geen checkpoint gevonden voor dit bericht",
+		"message_updated": "Bericht succesvol bijgewerkt"
 	}
 }

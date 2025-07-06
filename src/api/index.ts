@@ -15,6 +15,7 @@ import {
 	OllamaHandler,
 	LmStudioHandler,
 	GeminiHandler,
+	GeminiCliHandler, // kilocode_change
 	OpenAiNativeHandler,
 	DeepSeekHandler,
 	MistralHandler,
@@ -27,6 +28,8 @@ import {
 	GroqHandler,
 	ChutesHandler,
 	LiteLLMHandler,
+	CerebrasHandler, // kilocode_change
+	ClaudeCodeHandler,
 } from "./providers"
 // kilocode_change start
 import { FireworksHandler } from "./providers/fireworks"
@@ -70,6 +73,8 @@ export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
 			return new KilocodeOpenrouterHandler(options)
 		case "anthropic":
 			return new AnthropicHandler(options)
+		case "claude-code":
+			return new ClaudeCodeHandler(options)
 		case "glama":
 			return new GlamaHandler(options)
 		case "openrouter":
@@ -88,6 +93,10 @@ export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
 			return new LmStudioHandler(options)
 		case "gemini":
 			return new GeminiHandler(options)
+		// kilocode_change start
+		case "gemini-cli":
+			return new GeminiCliHandler(options)
+		// kilocode_change end
 		case "openai-native":
 			return new OpenAiNativeHandler(options)
 		case "deepseek":
@@ -116,6 +125,10 @@ export function buildApiHandler(configuration: ProviderSettings): ApiHandler {
 			return new ChutesHandler(options)
 		case "litellm":
 			return new LiteLLMHandler(options)
+		// kilocode_change start
+		case "cerebras":
+			return new CerebrasHandler(options)
+		// kilocode_change end
 		default:
 			return new AnthropicHandler(options)
 	}

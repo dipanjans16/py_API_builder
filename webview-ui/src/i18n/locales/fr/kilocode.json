@@ -1,9 +1,13 @@
 {
 	"welcome": {
-		"greeting": "Que peut faire Kilo Code pour vous ?",
-		"introText": "J'ai été formé sur les modèles d'IA les plus rapides disponibles et je suis prêt à générer du code pour vous à une vitesse fulgurante !",
-		"ctaButton": "Essayez Kilo Code gratuitement",
-		"manualModeButton": "Utilisez votre propre clé API"
+		"greeting": "Bienvenue dans Kilo Code !",
+		"introText1": "Kilo Code est un agent de codage IA gratuit et open source.",
+		"introText2": "Il fonctionne avec les derniers modèles d'IA comme Claude 4 Sonnet, Gemini 2.5 Pro, GPT-4.1, et plus de 450 autres.",
+		"introText3": "Créez un compte gratuit et obtenez 20 $ en tokens à utiliser avec n'importe quel modèle d'IA.",
+		"ctaButton": "Créer un compte gratuit",
+		"manualModeButton": "Utilisez votre propre clé API",
+		"alreadySignedUp": "Déjà inscrit ?",
+		"loginText": "Connectez-vous ici"
 	},
 	"lowCreditWarning": {
 		"addCredit": "Ajouter du crédit",
@@ -22,6 +26,19 @@
 			"apiKey": "Clé API Kilo Code",
 			"login": "Se connecter à Kilo Code",
 			"logout": "Se déconnecter de Kilo Code"
+		},
+		"contextManagement": {
+			"allowVeryLargeReads": {
+				"label": "Autoriser les lectures de fichiers très volumineux",
+				"description": "Lorsque cette option est activée, Kilo Code effectuera des lectures de fichiers ou de sorties MCP très volumineuses même s'il existe une forte probabilité de dépasser la fenêtre de contexte (taille du contenu >80% de la fenêtre de contexte)."
+			}
+		},
+		"systemNotifications": {
+			"label": "Activer les notifications système",
+			"description": "Lorsque cette option est activée, Kilo Code enverra des notifications système pour les événements importants comme la fin des tâches ou les erreurs.",
+			"testButton": "Tester la notification",
+			"testTitle": "Kilo Code",
+			"testMessage": "Ceci est une notification de test de Kilo Code."
 		}
 	},
 	"chat": {
@@ -38,12 +55,7 @@
 		"dashboard": "Tableau de bord",
 		"logOut": "Se déconnecter",
 		"currentBalance": "SOLDE ACTUEL",
-		"loading": "Chargement...",
-		"signUp": {
-			"title": "S'inscrire à Kilo Code",
-			"description": "S'inscrire à Kilo Code vous donne des crédits gratuits pour commencer. Utilisez vos crédits pour explorer nos fonctionnalités, essayer les modèles les plus récents et les meilleurs, et découvrir les avantages de Kilo Code sans engagement.",
-			"termsAndPrivacy": "En continuant, vous acceptez les <termsLink>Conditions de Service</termsLink> et la <privacyLink>Politique de Confidentialité.</privacyLink>"
-		}
+		"loading": "Chargement..."
 	},
 	"docs": "Documentation",
 	"rules": {
@@ -75,5 +87,34 @@
 			"newWorkflowFile": "Nouveau fichier de flux de travail...",
 			"newRuleFile": "Nouveau fichier de règle..."
 		}
+	},
+	"taskTimeline": {
+		"tooltip": {
+			"clickToScroll": "Voir {{messageType}} (#{{messageNumber}})",
+			"messageTypes": {
+				"browser_action_result": "résultat de l'action du navigateur",
+				"browser_action_launch": "lancement du navigateur",
+				"browser_action": "action du navigateur",
+				"completion_result": "résultat de complétion",
+				"command_output": "sortie de commande",
+				"checkpoint_saved": "point de sauvegarde enregistré",
+				"condense_context": "condenser le contexte",
+				"command": "exécution de commande",
+				"error": "message d'erreur",
+				"followup": "question complémentaire",
+				"mcp_server_response": "Réponse du serveur MCP",
+				"text": "Réponse de l'IA",
+				"unknown": "type de message inconnu",
+				"reasoning": "Raisonnement de l'IA",
+				"use_mcp_server": "Utilisation du serveur MCP",
+				"tool": "utilisation d'outils",
+				"user": "commentaires des utilisateurs"
+			}
+		}
+	},
+	"userFeedback": {
+		"editCancel": "Annuler",
+		"send": "Envoyer",
+		"restoreAndSend": "Restaurer et Envoyer"
 	}
 }

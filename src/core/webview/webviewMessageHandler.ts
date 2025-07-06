@@ -1,3 +1,4 @@
+import { safeWriteJson } from "../../utils/safeWriteJson"
 import * as path from "path"
 import fs from "fs/promises"
 import pWaitFor from "p-wait-for"
@@ -18,7 +19,8 @@ import { checkoutDiffPayloadSchema, checkoutRestorePayloadSchema, WebviewMessage
 import { checkExistKey } from "../../shared/checkExistApiConfig"
 import { experimentDefault } from "../../shared/experiments"
 import { Terminal } from "../../integrations/terminal/Terminal"
-import { openFile, openImage } from "../../integrations/misc/open-file"
+import { openFile } from "../../integrations/misc/open-file"
+import { openImage, saveImage } from "../../integrations/misc/image-handler"
 import { selectImages } from "../../integrations/misc/process-images"
 import { getTheme } from "../../integrations/theme/getTheme"
 import { discoverChromeHostUrl, tryChromeHostUrl } from "../../services/browser/browserDiscovery"
@@ -28,11 +30,9 @@ import { playTts, setTtsEnabled, setTtsSpeed, stopTts } from "../../utils/tts"
 import { showSystemNotification } from "../../integrations/notifications" // kilocode_change
 import { singleCompletionHandler } from "../../utils/single-completion-handler"
 import { searchCommits } from "../../utils/git"
-import { exportSettings, importSettings } from "../config/importExport"
+import { exportSettings, importSettingsWithFeedback } from "../config/importExport"
 import { getOpenAiModels } from "../../api/providers/openai"
-import { getOllamaModels } from "../../api/providers/ollama"
 import { getVsCodeLmModels } from "../../api/providers/vscode-lm"
-import { getLmStudioModels } from "../../api/providers/lm-studio"
 import { openMention } from "../mentions"
 import { TelemetrySetting } from "../../shared/TelemetrySetting"
 import { getWorkspacePath } from "../../utils/path"
@@ -42,10 +42,18 @@ import { GetModelsOptions } from "../../shared/api"
 import { generateSystemPrompt } from "./generateSystemPrompt"
 import { getCommand } from "../../utils/commands"
 import { toggleWorkflow, toggleRule, createRuleFile, deleteRuleFile } from "./kilorules"
+import { mermaidFixPrompt } from "../prompts/utilities/mermaid" // kilocode_change
+import { editMessageHandler } from "../kilocode/webview/webviewMessageHandlerUtils" // kilocode_change
 
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
-export const webviewMessageHandler = async (provider: ClineProvider, message: WebviewMessage) => {
+import { MarketplaceManager, MarketplaceItemType } from "../../services/marketplace"
+
+export const webviewMessageHandler = async (
+	provider: ClineProvider,
+	message: WebviewMessage,
+	marketplaceManager?: MarketplaceManager,
+) => {
 	// Utility functions provided for concise get/update of global state via contextProxy API.
 	const getGlobalState = <K extends keyof GlobalState>(key: K) => provider.contextProxy.getValue(key)
 	const updateGlobalState = async <K extends keyof GlobalState>(key: K, value: GlobalState[K]) =>
@@ -62,6 +70,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await refreshWorkflowToggles(provider.context, provider.cwd) // kilocode_change
 
 			provider.postStateToWebview()
+			provider.postRulesDataToWebview() // kilocode_change: send workflows and rules immediately
 			provider.workspaceTracker?.initializeFilePaths() // Don't await.
 
 			getTheme().then((theme) => provider.postMessageToWebview({ type: "theme", text: JSON.stringify(theme) }))
@@ -153,6 +162,10 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await updateGlobalState("alwaysAllowWriteOutsideWorkspace", message.bool ?? undefined)
 			await provider.postStateToWebview()
 			break
+		case "alwaysAllowWriteProtected":
+			await updateGlobalState("alwaysAllowWriteProtected", message.bool ?? undefined)
+			await provider.postStateToWebview()
+			break
 		case "alwaysAllowExecute":
 			await updateGlobalState("alwaysAllowExecute", message.bool ?? undefined)
 			await provider.postStateToWebview()
@@ -195,7 +208,14 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		case "clearTask":
 			// clear task resets the current session and allows for a new task to be started, if this session is a subtask - it allows the parent task to be resumed
-			await provider.finishSubTask(t("common:tasks.canceled"))
+			// Check if the current task actually has a parent task
+			const currentTask = provider.getCurrentCline()
+			if (currentTask && currentTask.parentTask) {
+				await provider.finishSubTask(t("common:tasks.canceled"))
+			} else {
+				// Regular task - just clear it
+				await provider.clearTask()
+			}
 			await provider.postStateToWebview()
 			break
 		case "didShowAnnouncement":
@@ -214,22 +234,45 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		case "shareCurrentTask":
 			const shareTaskId = provider.getCurrentCline()?.taskId
+			const clineMessages = provider.getCurrentCline()?.clineMessages
 			if (!shareTaskId) {
 				vscode.window.showErrorMessage(t("common:errors.share_no_active_task"))
 				break
 			}
 
 			try {
-				const success = await CloudService.instance.shareTask(shareTaskId)
-				if (success) {
-					// Show success message
-					vscode.window.showInformationMessage(t("common:info.share_link_copied"))
+				const visibility = message.visibility || "organization"
+				const result = await CloudService.instance.shareTask(shareTaskId, visibility, clineMessages)
+
+				if (result.success && result.shareUrl) {
+					// Show success notification
+					const messageKey =
+						visibility === "public"
+							? "common:info.public_share_link_copied"
+							: "common:info.organization_share_link_copied"
+					vscode.window.showInformationMessage(t(messageKey))
+
+					// Send success feedback to webview for inline display
+					await provider.postMessageToWebview({
+						type: "shareTaskSuccess",
+						visibility,
+						text: result.shareUrl,
+					})
 				} else {
-					// Show generic failure message
-					vscode.window.showErrorMessage(t("common:errors.share_task_failed"))
+					// Handle error
+					const errorMessage = result.error || "Failed to create share link"
+					if (errorMessage.includes("Authentication")) {
+						vscode.window.showErrorMessage(t("common:errors.share_auth_required"))
+					} else if (errorMessage.includes("sharing is not enabled")) {
+						vscode.window.showErrorMessage(t("common:errors.share_not_enabled"))
+					} else if (errorMessage.includes("not found")) {
+						vscode.window.showErrorMessage(t("common:errors.share_task_not_found"))
+					} else {
+						vscode.window.showErrorMessage(errorMessage)
+					}
 				}
 			} catch (error) {
-				// Show generic failure message
+				provider.log(`[shareCurrentTask] Unexpected error: ${error}`)
 				vscode.window.showErrorMessage(t("common:errors.share_task_failed"))
 			}
 			break
@@ -290,19 +333,12 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			provider.exportTaskWithId(message.text!)
 			break
 		case "importSettings": {
-			const result = await importSettings({
+			await importSettingsWithFeedback({
 				providerSettingsManager: provider.providerSettingsManager,
 				contextProxy: provider.contextProxy,
 				customModesManager: provider.customModesManager,
+				provider: provider,
 			})
-
-			if (result.success) {
-				provider.settingsImportedAt = Date.now()
-				await provider.postStateToWebview()
-				await vscode.window.showInformationMessage(t("common:info.settings_imported"))
-			} else if (result.error) {
-				await vscode.window.showErrorMessage(t("common:errors.settings_import_failed", { error: result.error }))
-			}
 
 			break
 		}
@@ -330,6 +366,8 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				unbound: {},
 				litellm: {},
 				"kilocode-openrouter": {}, // kilocode_change
+				ollama: {},
+				lmstudio: {},
 			}
 
 			const safeGetModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
@@ -363,6 +401,9 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			]
 			// kilocode_change end
 
+			// Don't fetch Ollama and LM Studio models by default anymore
+			// They have their own specific handlers: requestOllamaModels and requestLmStudioModels
+
 			const litellmApiKey = apiConfiguration.litellmApiKey || message?.values?.litellmApiKey
 			const litellmBaseUrl = apiConfiguration.litellmBaseUrl || message?.values?.litellmBaseUrl
 			if (litellmApiKey && litellmBaseUrl) {
@@ -379,13 +420,31 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				}),
 			)
 
-			const fetchedRouterModels: Partial<Record<RouterName, ModelRecord>> = { ...routerModels }
+			const fetchedRouterModels: Partial<Record<RouterName, ModelRecord>> = {
+				...routerModels,
+				// Initialize ollama and lmstudio with empty objects since they use separate handlers
+				ollama: {},
+				lmstudio: {},
+			}
 
 			results.forEach((result, index) => {
 				const routerName = modelFetchPromises[index].key // Get RouterName using index
 
 				if (result.status === "fulfilled") {
 					fetchedRouterModels[routerName] = result.value.models
+
+					// Ollama and LM Studio settings pages still need these events
+					if (routerName === "ollama" && Object.keys(result.value.models).length > 0) {
+						provider.postMessageToWebview({
+							type: "ollamaModels",
+							ollamaModels: Object.keys(result.value.models),
+						})
+					} else if (routerName === "lmstudio" && Object.keys(result.value.models).length > 0) {
+						provider.postMessageToWebview({
+							type: "lmStudioModels",
+							lmStudioModels: Object.keys(result.value.models),
+						})
+					}
 				} else {
 					// Handle rejection: Post a specific error message for this provider
 					const errorMessage = result.reason instanceof Error ? result.reason.message : String(result.reason)
@@ -406,7 +465,56 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				type: "routerModels",
 				routerModels: fetchedRouterModels as Record<RouterName, ModelRecord>,
 			})
+
 			break
+		case "requestOllamaModels": {
+			// Specific handler for Ollama models only
+			const { apiConfiguration: ollamaApiConfig } = await provider.getState()
+			try {
+				// Flush cache first to ensure fresh models
+				await flushModels("ollama")
+
+				const ollamaModels = await getModels({
+					provider: "ollama",
+					baseUrl: ollamaApiConfig.ollamaBaseUrl,
+				})
+
+				if (Object.keys(ollamaModels).length > 0) {
+					provider.postMessageToWebview({
+						type: "ollamaModels",
+						ollamaModels: Object.keys(ollamaModels),
+					})
+				}
+			} catch (error) {
+				// Silently fail - user hasn't configured Ollama yet
+				console.debug("Ollama models fetch failed:", error)
+			}
+			break
+		}
+		case "requestLmStudioModels": {
+			// Specific handler for LM Studio models only
+			const { apiConfiguration: lmStudioApiConfig } = await provider.getState()
+			try {
+				// Flush cache first to ensure fresh models
+				await flushModels("lmstudio")
+
+				const lmStudioModels = await getModels({
+					provider: "lmstudio",
+					baseUrl: lmStudioApiConfig.lmStudioBaseUrl,
+				})
+
+				if (Object.keys(lmStudioModels).length > 0) {
+					provider.postMessageToWebview({
+						type: "lmStudioModels",
+						lmStudioModels: Object.keys(lmStudioModels),
+					})
+				}
+			} catch (error) {
+				// Silently fail - user hasn't configured LM Studio yet
+				console.debug("LM Studio models fetch failed:", error)
+			}
+			break
+		}
 		case "requestOpenAiModels":
 			if (message?.values?.baseUrl && message?.values?.apiKey) {
 				const openAiModels = await getOpenAiModels(
@@ -419,29 +527,27 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			}
 
 			break
-		case "requestOllamaModels":
-			const ollamaModels = await getOllamaModels(message.text)
-			// TODO: Cache like we do for OpenRouter, etc?
-			provider.postMessageToWebview({ type: "ollamaModels", ollamaModels })
-			break
-		case "requestLmStudioModels":
-			const lmStudioModels = await getLmStudioModels(message.text)
-			// TODO: Cache like we do for OpenRouter, etc?
-			provider.postMessageToWebview({ type: "lmStudioModels", lmStudioModels })
-			break
 		case "requestVsCodeLmModels":
 			const vsCodeLmModels = await getVsCodeLmModels()
 			// TODO: Cache like we do for OpenRouter, etc?
 			provider.postMessageToWebview({ type: "vsCodeLmModels", vsCodeLmModels })
 			break
 		case "openImage":
-			openImage(message.text!)
+			openImage(message.text!, { values: message.values })
+			break
+		case "saveImage":
+			saveImage(message.dataUri!)
 			break
 		case "openFile":
 			openFile(message.text!, message.values as { create?: boolean; content?: string; line?: number })
 			break
 		case "openMention":
 			openMention(message.text)
+			break
+		case "openExternal":
+			if (message.url) {
+				vscode.env.openExternal(vscode.Uri.parse(message.url))
+			}
 			break
 		case "checkpointDiff":
 			const result = checkoutDiffPayloadSchema.safeParse(message.payload)
@@ -475,15 +581,22 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		case "cancelTask":
 			await provider.cancelTask()
 			break
-		case "allowedCommands":
-			await provider.context.globalState.update("allowedCommands", message.commands)
+		case "allowedCommands": {
+			// Validate and sanitize the commands array
+			const commands = message.commands ?? []
+			const validCommands = Array.isArray(commands)
+				? commands.filter((cmd) => typeof cmd === "string" && cmd.trim().length > 0)
+				: []
+
+			await updateGlobalState("allowedCommands", validCommands)
 
 			// Also update workspace settings.
 			await vscode.workspace
 				.getConfiguration(Package.name)
-				.update("allowedCommands", message.commands, vscode.ConfigurationTarget.Global)
+				.update("allowedCommands", validCommands, vscode.ConfigurationTarget.Global)
 
 			break
+		}
 		case "openCustomModesSettings": {
 			const customModesFilePath = await provider.customModesManager.getCustomModesFilePath()
 
@@ -511,27 +624,16 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			const workspaceFolder = vscode.workspace.workspaceFolders[0]
 			const rooDir = path.join(workspaceFolder.uri.fsPath, ".kilocode")
 			const mcpPath = path.join(rooDir, "mcp.json")
-			const rootMcpPath = path.join(workspaceFolder.uri.fsPath, ".mcp.json")
 
 			try {
-				// First check if .kilocode/mcp.json exists
-				const kilocodeExists = await fileExistsAtPath(mcpPath)
-				if (kilocodeExists) {
-					// Open it
-					await openFile(mcpPath)
-				} else {
-					// Check if .mcp.json exists in the root directory
-					const rootExists = await fileExistsAtPath(rootMcpPath)
-					if (rootExists) {
-						// Open it
-						await openFile(rootMcpPath)
-					} else {
-						// If neither exists, create .kilocode/mcp.json to mark the territory
-						await fs.mkdir(rooDir, { recursive: true })
-						await fs.writeFile(mcpPath, JSON.stringify({ mcpServers: {} }, null, 2))
-						await openFile(mcpPath)
-					}
+				await fs.mkdir(rooDir, { recursive: true })
+				const exists = await fileExistsAtPath(mcpPath)
+
+				if (!exists) {
+					await safeWriteJson(mcpPath, { mcpServers: {} })
 				}
+
+				openFile(mcpPath)
 			} catch (error) {
 				vscode.window.showErrorMessage(t("mcp:errors.create_json", { error: `${error}` }))
 			}
@@ -547,6 +649,9 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				provider.log(`Attempting to delete MCP server: ${message.serverName}`)
 				await provider.getMcpHub()?.deleteServer(message.serverName, message.source as "global" | "project")
 				provider.log(`Successfully deleted MCP server: ${message.serverName}`)
+
+				// Refresh the webview state
+				await provider.postStateToWebview()
 			} catch (error) {
 				const errorMessage = error instanceof Error ? error.message : String(error)
 				provider.log(`Failed to delete MCP server: ${errorMessage}`)
@@ -581,6 +686,23 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			}
 			break
 		}
+		case "toggleToolEnabledForPrompt": {
+			try {
+				await provider
+					.getMcpHub()
+					?.toggleToolEnabledForPrompt(
+						message.serverName!,
+						message.source as "global" | "project",
+						message.toolName!,
+						Boolean(message.isEnabled),
+					)
+			} catch (error) {
+				provider.log(
+					`Failed to toggle enabled for prompt for tool ${message.toolName}: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+				)
+			}
+			break
+		}
 		case "toggleMcpServer": {
 			try {
 				await provider
@@ -608,9 +730,18 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		// kilocode_change begin
 		case "showSystemNotification":
+			const isSystemNotificationsEnabled = getGlobalState("systemNotificationsEnabled") ?? true
+			if (!isSystemNotificationsEnabled) {
+				break
+			}
 			if (message.notificationOptions) {
 				showSystemNotification(message.notificationOptions)
 			}
+			break
+		case "systemNotificationsEnabled":
+			const systemNotificationsEnabled = message.bool ?? true
+			await updateGlobalState("systemNotificationsEnabled", systemNotificationsEnabled)
+			await provider.postStateToWebview()
 			break
 		case "openInBrowser":
 			if (message.url) {
@@ -848,7 +979,12 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		case "updateSupportPrompt":
 			try {
-				await updateGlobalState("customSupportPrompts", message.values || {})
+				if (!message?.values) {
+					return
+				}
+
+				// Replace all prompts with the new values from the cached state
+				await updateGlobalState("customSupportPrompts", message.values)
 				await provider.postStateToWebview()
 			} catch (error) {
 				provider.log(
@@ -863,8 +999,27 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				const updatedPrompts = { ...existingPrompts, [message.promptMode]: message.customPrompt }
 				await updateGlobalState("customModePrompts", updatedPrompts)
 				const currentState = await provider.getStateToPostToWebview()
-				const stateWithPrompts = { ...currentState, customModePrompts: updatedPrompts }
+				const stateWithPrompts = {
+					...currentState,
+					customModePrompts: updatedPrompts,
+					hasOpenedModeSelector: currentState.hasOpenedModeSelector ?? false,
+				}
 				provider.postMessageToWebview({ type: "state", state: stateWithPrompts })
+
+				if (TelemetryService.hasInstance()) {
+					// Determine which setting was changed by comparing objects
+					const oldPrompt = existingPrompts[message.promptMode] || {}
+					const newPrompt = message.customPrompt
+					const changedSettings = Object.keys(newPrompt).filter(
+						(key) =>
+							JSON.stringify((oldPrompt as Record<string, unknown>)[key]) !==
+							JSON.stringify((newPrompt as Record<string, unknown>)[key]),
+					)
+
+					if (changedSettings.length > 0) {
+						TelemetryService.instance.captureModeSettingChanged(changedSettings[0])
+					}
+				}
 			}
 			break
 		case "deleteMessage": {
@@ -1000,6 +1155,10 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await updateGlobalState("showRooIgnoredFiles", message.bool ?? true)
 			await provider.postStateToWebview()
 			break
+		case "hasOpenedModeSelector":
+			await updateGlobalState("hasOpenedModeSelector", message.bool ?? true)
+			await provider.postStateToWebview()
+			break
 		case "maxReadFileLine":
 			await updateGlobalState("maxReadFileLine", message.value)
 			await provider.postStateToWebview()
@@ -1007,6 +1166,14 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		// kilocode_change start
 		case "showAutoApproveMenu":
 			await updateGlobalState("showAutoApproveMenu", message.bool ?? true)
+			await provider.postStateToWebview()
+			break
+		case "showTaskTimeline":
+			await updateGlobalState("showTaskTimeline", message.bool ?? false)
+			await provider.postStateToWebview()
+			break
+		case "allowVeryLargeReads":
+			await updateGlobalState("allowVeryLargeReads", message.bool ?? false)
 			await provider.postStateToWebview()
 			break
 		// kilocode_change end
@@ -1052,6 +1219,10 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			await updateGlobalState("customCondensingPrompt", message.text)
 			await provider.postStateToWebview()
 			break
+		case "profileThresholds":
+			await updateGlobalState("profileThresholds", message.values)
+			await provider.postStateToWebview()
+			break
 		case "autoApprovalEnabled":
 			await updateGlobalState("autoApprovalEnabled", message.bool ?? false)
 			await provider.postStateToWebview()
@@ -1079,6 +1250,10 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 						configToUse,
 						supportPrompt.create("ENHANCE", { userInput: message.text }, customSupportPrompts),
 					)
+
+					// Capture telemetry for prompt enhancement.
+					const currentCline = provider.getCurrentCline()
+					TelemetryService.instance.capturePromptEnhanced(currentCline?.taskId)
 
 					await provider.postMessageToWebview({ type: "enhancedPrompt", text: enhancedPrompt })
 				} catch (error) {
@@ -1357,12 +1532,41 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 			break
 		case "updateCustomMode":
 			if (message.modeConfig) {
+				// Check if this is a new mode or an update to an existing mode
+				const existingModes = await provider.customModesManager.getCustomModes()
+				const isNewMode = !existingModes.some((mode) => mode.slug === message.modeConfig?.slug)
+
 				await provider.customModesManager.updateCustomMode(message.modeConfig.slug, message.modeConfig)
 				// Update state after saving the mode
 				const customModes = await provider.customModesManager.getCustomModes()
 				await updateGlobalState("customModes", customModes)
 				await updateGlobalState("mode", message.modeConfig.slug)
 				await provider.postStateToWebview()
+
+				// Track telemetry for custom mode creation or update
+				if (TelemetryService.hasInstance()) {
+					if (isNewMode) {
+						// This is a new custom mode
+						TelemetryService.instance.captureCustomModeCreated(
+							message.modeConfig.slug,
+							message.modeConfig.name,
+						)
+					} else {
+						// Determine which setting was changed by comparing objects
+						const existingMode = existingModes.find((mode) => mode.slug === message.modeConfig?.slug)
+						const changedSettings = existingMode
+							? Object.keys(message.modeConfig).filter(
+									(key) =>
+										JSON.stringify((existingMode as Record<string, unknown>)[key]) !==
+										JSON.stringify((message.modeConfig as Record<string, unknown>)[key]),
+								)
+							: []
+
+						if (changedSettings.length > 0) {
+							TelemetryService.instance.captureModeSettingChanged(changedSettings[0])
+						}
+					}
+				}
 			}
 			break
 		case "deleteCustomMode":
@@ -1564,10 +1768,9 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		case "telemetrySetting": {
 			const telemetrySetting = message.text as TelemetrySetting
 			await updateGlobalState("telemetrySetting", telemetrySetting)
-			// kilocode_change: do not get instance
-			// const isOptedIn = telemetrySetting === "enabled"
+			const isOptedIn = telemetrySetting === "enabled"
 
-			// TelemetryService.instance.updateTelemetryState(isOptedIn)
+			TelemetryService.instance.updateTelemetryState(isOptedIn)
 			await provider.postStateToWebview()
 			break
 		}
@@ -1578,8 +1781,7 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 		}
 		case "rooCloudSignIn": {
 			try {
-				// kilocode_change: do not get instance
-				// TelemetryService.instance.captureEvent(TelemetryEventName.AUTHENTICATION_INITIATED)
+				TelemetryService.instance.captureEvent(TelemetryEventName.AUTHENTICATION_INITIATED)
 				await CloudService.instance.login()
 			} catch (error) {
 				provider.log(`AuthService#login failed: ${error}`)
@@ -1678,6 +1880,139 @@ export const webviewMessageHandler = async (provider: ClineProvider, message: We
 				await provider.toggleTaskFavorite(message.text)
 			}
 			break
+		case "fixMermaidSyntax":
+			if (message.text && message.requestId) {
+				try {
+					const { apiConfiguration } = await provider.getState()
+
+					const prompt = mermaidFixPrompt(message.values?.error || "Unknown syntax error", message.text)
+
+					const fixedCode = await singleCompletionHandler(apiConfiguration, prompt)
+
+					provider.postMessageToWebview({
+						type: "mermaidFixResponse",
+						requestId: message.requestId,
+						success: true,
+						fixedCode: fixedCode?.trim() || null,
+					})
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : "Failed to fix Mermaid syntax"
+					provider.log(`Error fixing Mermaid syntax: ${errorMessage}`)
+
+					provider.postMessageToWebview({
+						type: "mermaidFixResponse",
+						requestId: message.requestId,
+						success: false,
+						error: errorMessage,
+					})
+				}
+			}
+			break
+		// kilocode_change end
+		case "focusPanelRequest": {
+			// Execute the focusPanel command to focus the WebView
+			await vscode.commands.executeCommand(getCommand("focusPanel"))
+			break
+		}
+		case "filterMarketplaceItems": {
+			if (marketplaceManager && message.filters) {
+				try {
+					await marketplaceManager.updateWithFilteredItems({
+						type: message.filters.type as MarketplaceItemType | undefined,
+						search: message.filters.search,
+						tags: message.filters.tags,
+					})
+					await provider.postStateToWebview()
+				} catch (error) {
+					console.error("Marketplace: Error filtering items:", error)
+					vscode.window.showErrorMessage("Failed to filter marketplace items")
+				}
+			}
+			break
+		}
+
+		case "fetchMarketplaceData": {
+			// Fetch marketplace data on demand
+			await provider.fetchMarketplaceData()
+			break
+		}
+
+		case "installMarketplaceItem": {
+			if (marketplaceManager && message.mpItem && message.mpInstallOptions) {
+				try {
+					const configFilePath = await marketplaceManager.installMarketplaceItem(
+						message.mpItem,
+						message.mpInstallOptions,
+					)
+					await provider.postStateToWebview()
+					console.log(`Marketplace item installed and config file opened: ${configFilePath}`)
+
+					// Send success message to webview
+					provider.postMessageToWebview({
+						type: "marketplaceInstallResult",
+						success: true,
+						slug: message.mpItem.id,
+					})
+				} catch (error) {
+					console.error(`Error installing marketplace item: ${error}`)
+					// Send error message to webview
+					provider.postMessageToWebview({
+						type: "marketplaceInstallResult",
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+						slug: message.mpItem.id,
+					})
+				}
+			}
+			break
+		}
+
+		case "removeInstalledMarketplaceItem": {
+			if (marketplaceManager && message.mpItem && message.mpInstallOptions) {
+				try {
+					await marketplaceManager.removeInstalledMarketplaceItem(message.mpItem, message.mpInstallOptions)
+					await provider.postStateToWebview()
+				} catch (error) {
+					console.error(`Error removing marketplace item: ${error}`)
+				}
+			}
+			break
+		}
+
+		case "installMarketplaceItemWithParameters": {
+			if (marketplaceManager && message.payload && "item" in message.payload && "parameters" in message.payload) {
+				try {
+					const configFilePath = await marketplaceManager.installMarketplaceItem(message.payload.item, {
+						parameters: message.payload.parameters,
+					})
+					await provider.postStateToWebview()
+					console.log(`Marketplace item with parameters installed and config file opened: ${configFilePath}`)
+				} catch (error) {
+					console.error(`Error installing marketplace item with parameters: ${error}`)
+					vscode.window.showErrorMessage(
+						`Failed to install marketplace item: ${error instanceof Error ? error.message : String(error)}`,
+					)
+				}
+			}
+			break
+		}
+
+		case "switchTab": {
+			if (message.tab) {
+				// Capture tab shown event for all switchTab messages (which are user-initiated)
+				if (TelemetryService.hasInstance()) {
+					TelemetryService.instance.captureTabShown(message.tab)
+				}
+
+				await provider.postMessageToWebview({ type: "action", action: "switchTab", tab: message.tab })
+			}
+			break
+		}
+		// kilocode_change start
+		case "editMessage": {
+			await editMessageHandler(provider, message)
+			break
+		}
 		// kilocode_change end
 	}
 }

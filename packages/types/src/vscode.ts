@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { kiloLanguages } from "./kiloLanguages.js"
 
 /**
  * CodeAction
@@ -31,8 +32,10 @@ export const commandIds = [
 
 	"plusButtonClicked",
 	"promptsButtonClicked",
+	"mcpButtonClicked",
 
 	"historyButtonClicked",
+	"marketplaceButtonClicked",
 	"popoutButtonClicked",
 	"accountButtonClicked",
 	"settingsButtonClicked",
@@ -47,6 +50,7 @@ export const commandIds = [
 	"newTask",
 
 	"setCustomStoragePath",
+	"importSettings",
 
 	// "focusInput", // kilocode_change
 	"acceptInput",
@@ -55,6 +59,7 @@ export const commandIds = [
 	"focusChatInput", // kilocode_change
 	"importSettings", // kilocode_change
 	"exportSettings", // kilocode_change
+	"focusPanel",
 ] as const
 
 export type CommandId = (typeof commandIds)[number]
@@ -64,13 +69,14 @@ export type CommandId = (typeof commandIds)[number]
  */
 
 export const languages = [
+	...kiloLanguages,
 	"ca",
 	"de",
 	"en",
 	"es",
 	"fr",
 	"hi",
-	"id", // kilocode_change
+	"id",
 	"it",
 	"ja",
 	"ko",

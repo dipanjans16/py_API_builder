@@ -6,6 +6,7 @@
 		"title": "Peringatan Kredit Rendah!",
 		"message": "Periksa apakah kamu bisa mengisi ulang dengan kredit gratis atau beli lebih banyak!"
 	},
+	"notLoggedInError": "Tidak dapat menyelesaikan permintaan, pastikan kamu terhubung dan masuk dengan penyedia yang dipilih.",
 	"rules": {
 		"actions": {
 			"delete": "Hapus",
@@ -46,5 +47,10 @@
 		"tokenRequired": "Token Kilo Code diperlukan untuk pembuatan pesan commit",
 		"activationFailed": "Kilo: Gagal mengaktifkan penyedia pesan commit: {{error}}",
 		"providerRegistered": "Kilo: Penyedia pesan commit terdaftar"
+	},
+	"userFeedback": {
+		"message_update_failed": "Gagal memperbarui pesan",
+		"no_checkpoint_found": "Tidak ditemukan checkpoint sebelum pesan ini",
+		"message_updated": "Pesan berhasil diperbarui"
 	}
 }

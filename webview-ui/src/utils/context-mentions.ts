@@ -21,8 +21,8 @@ export function insertMention(
 	position: number,
 	value: string,
 ): { newValue: string; mentionIndex: number } {
-	// Handle slash command
-	if (text.startsWith("/")) {
+	// Handle slash command mode selection (when there's no @ symbol)
+	if (text.startsWith("/") && !text.includes("@")) {
 		return {
 			newValue: value,
 			mentionIndex: 0,
@@ -144,7 +144,7 @@ export function getContextMenuOptions(
 					type: ContextMenuOptionType.Mode,
 					value: mode.slug,
 					label: mode.name,
-					description: (mode.whenToUse || mode.roleDefinition).split("\n")[0],
+					description: (mode.description || mode.whenToUse || mode.roleDefinition).split("\n")[0],
 				}))
 
 		return matchingModes.length > 0 ? matchingModes : [{ type: ContextMenuOptionType.NoResults }]
@@ -302,10 +302,6 @@ export function getContextMenuOptions(
 }
 
 export function shouldShowContextMenu(text: string, position: number): boolean {
-	// Handle slash command
-	if (text.startsWith("/")) {
-		return position <= text.length && !text.includes(" ")
-	}
 	const beforeCursor = text.slice(0, position)
 	const atIndex = beforeCursor.lastIndexOf("@")
 

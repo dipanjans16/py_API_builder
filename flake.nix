@@ -2,7 +2,7 @@
   description = "Kilo Code development environment";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
   };
 
   outputs = { self, nixpkgs, ... }: let
@@ -18,6 +18,7 @@
       packages = with pkgs; [
         nodejs_20
         corepack_20
+        libnotify
       ];
     };
   in {

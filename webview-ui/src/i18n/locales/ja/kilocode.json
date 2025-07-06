@@ -1,9 +1,13 @@
 {
 	"welcome": {
-		"greeting": "Kilo Codeはあなたのために何ができますか？",
-		"introText": "私は利用可能な最速のAIモデルでトレーニングされており、あなたのために超高速でコードを生成する準備ができています！",
-		"ctaButton": "Kilo Codeを無料で試す",
-		"manualModeButton": "自分のAPIキーを使う"
+		"greeting": "Kilo Codeへようこそ！",
+		"introText1": "Kilo Codeは無料のオープンソースAIコーディングエージェントです。",
+		"introText2": "Claude 4 Sonnet、Gemini 2.5 Pro、GPT-4.1、その他450以上の最新のAIモデルと連携します。",
+		"introText3": "無料アカウントを作成して、任意のAIモデルで使用できる$20のトークンを取得しましょう。",
+		"ctaButton": "無料アカウントを作成",
+		"manualModeButton": "自分のAPIキーを使う",
+		"alreadySignedUp": "すでに登録済みですか？",
+		"loginText": "こちらからログイン"
 	},
 	"lowCreditWarning": {
 		"addCredit": "クレジットを追加",
@@ -22,6 +26,19 @@
 			"apiKey": "Kilo Code APIキー",
 			"login": "Kilo Codeにログイン",
 			"logout": "Kilo Codeからログアウト"
+		},
+		"contextManagement": {
+			"allowVeryLargeReads": {
+				"label": "非常に大きなファイルの読み取りを許可",
+				"description": "有効にすると、Kilo Codeはコンテキストウィンドウをオーバーフローする可能性が高い場合でも、非常に大きなファイルやMCP出力の読み取りを実行します（コンテンツサイズがコンテキストウィンドウの80%以上）。"
+			}
+		},
+		"systemNotifications": {
+			"label": "システム通知を有効にする",
+			"description": "有効にすると、Kilo Codeはタスクの完了やエラーなどの重要なイベントについてシステム通知を送信します。",
+			"testButton": "通知をテスト",
+			"testTitle": "Kilo Code",
+			"testMessage": "これはKilo Codeからのテスト通知です。"
 		}
 	},
 	"chat": {
@@ -38,12 +55,7 @@
 		"dashboard": "ダッシュボード",
 		"logOut": "ログアウト",
 		"currentBalance": "現在の残高",
-		"loading": "読み込み中...",
-		"signUp": {
-			"title": "Kilo Codeにサインアップ",
-			"description": "Kilo Codeにサインアップすると、開始するための無料クレジットが提供されます。クレジットを使用して機能を探索し、最新で最高のモデルを試し、コミットメントなしでKilo Codeの利点を体験してください。",
-			"termsAndPrivacy": "続行することで、<termsLink>利用規約</termsLink>および<privacyLink>プライバシーポリシー</privacyLink>に同意したものとみなされます。"
-		}
+		"loading": "読み込み中..."
 	},
 	"docs": "ドキュメント",
 	"rules": {
@@ -75,5 +87,34 @@
 			"newWorkflowFile": "新しいワークフローファイル...",
 			"newRuleFile": "新しいルールファイル..."
 		}
+	},
+	"taskTimeline": {
+		"tooltip": {
+			"messageTypes": {
+				"browser_action_launch": "ブラウザ起動",
+				"browser_action_result": "ブラウザ操作の結果",
+				"browser_action": "ブラウザアクション",
+				"command": "コマンド実行",
+				"checkpoint_saved": "チェックポイントを保存しました",
+				"command_output": "コマンド出力",
+				"completion_result": "完了結果",
+				"followup": "フォローアップの質問",
+				"reasoning": "AI推論",
+				"condense_context": "文脈を要約",
+				"error": "エラーメッセージ",
+				"mcp_server_response": "MCP サーバーの応答",
+				"text": "AI応答",
+				"use_mcp_server": "MCPサーバーの使用状況",
+				"tool": "ツール使用",
+				"unknown": "不明なメッセージタイプ",
+				"user": "ユーザーフィードバック"
+			},
+			"clickToScroll": "{{messageType}}を表示 (#{{messageNumber}})"
+		}
+	},
+	"userFeedback": {
+		"editCancel": "キャンセル",
+		"send": "送信",
+		"restoreAndSend": "復元して送信"
 	}
 }

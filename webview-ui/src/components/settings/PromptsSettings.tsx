@@ -6,22 +6,27 @@ import { supportPrompt, SupportPromptType } from "@roo/support-prompt"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@src/components/ui"
+import {
+	Button,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+	StandardTooltip,
+} from "@src/components/ui"
 import { SectionHeader } from "./SectionHeader"
 import { Section } from "./Section"
 import { MessageSquare } from "lucide-react"
 import CommitMessagePromptSettings from "./CommitMessagePromptSettings"
 
-// kilocode_change start
 interface PromptsSettingsProps {
 	customSupportPrompts: Record<string, string | undefined>
 	setCustomSupportPrompts: (prompts: Record<string, string | undefined>) => void
 }
-// kilocode_change end
 
 const PromptsSettings = ({ customSupportPrompts, setCustomSupportPrompts }: PromptsSettingsProps) => {
 	const { t } = useAppTranslation()
-
 	const { listApiConfigMeta, enhancementApiConfigId, setEnhancementApiConfigId } = useExtensionState()
 
 	const [testPrompt, setTestPrompt] = useState("")
@@ -101,15 +106,14 @@ const PromptsSettings = ({ customSupportPrompts, setCustomSupportPrompts }: Prom
 				<div key={activeSupportOption} className="mt-4">
 					<div className="flex justify-between items-center mb-1">
 						<label className="block font-medium">{t("prompts:supportPrompts.prompt")}</label>
-						<Button
-							variant="ghost"
-							size="icon"
-							onClick={() => handleSupportReset(activeSupportOption)}
-							title={t("prompts:supportPrompts.resetPrompt", {
+						<StandardTooltip
+							content={t("prompts:supportPrompts.resetPrompt", {
 								promptType: activeSupportOption,
 							})}>
-							<span className="codicon codicon-discard"></span>
-						</Button>
+							<Button variant="ghost" size="icon" onClick={() => handleSupportReset(activeSupportOption)}>
+								<span className="codicon codicon-discard"></span>
+							</Button>
+						</StandardTooltip>
 					</div>
 
 					<VSCodeTextArea

@@ -19,18 +19,18 @@ import {
 	SearchResult,
 } from "@src/utils/context-mentions"
 import { convertToMentionPath } from "@/utils/path-mentions"
-import { SelectDropdown, DropdownOptionType, Button } from "@/components/ui"
+import { SelectDropdown, DropdownOptionType, Button, StandardTooltip } from "@/components/ui"
 // import { normalizeApiConfiguration } from "@/utils/normalizeApiConfiguration" // kilocode_change
-import { useVSCodeTheme } from "@/kilocode/hooks/useVSCodeTheme" // kilocode_change
 
 import Thumbnails from "../common/Thumbnails"
+// import ModeSelector from "./ModeSelector" // kilocode_change: unused
 import { MAX_IMAGES_PER_MESSAGE } from "./ChatView"
 import ContextMenu from "./ContextMenu"
 import { VolumeX, Pin, Check } from "lucide-react"
 import { IconButton } from "./IconButton"
+import { IndexingStatusDot } from "./IndexingStatusBadge"
 import { cn } from "@/lib/utils"
-
-import { useSelectedModel } from "../ui/hooks/useSelectedModel"
+import { usePromptHistory } from "./hooks/usePromptHistory"
 
 // kilocode_change start: pull slash commands from Cline
 import SlashCommandMenu from "@/components/chat/SlashCommandMenu"
@@ -87,15 +87,16 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			currentApiConfigName,
 			listApiConfigMeta,
 			customModes,
+			// customModePrompts, // kilocode_change: unused
 			cwd,
 			pinnedApiConfigs,
 			togglePinnedApiConfig,
-			apiConfiguration, // kilocode_change
 			localWorkflows, // kilocode_change
 			globalWorkflows, // kilocode_change
+			taskHistory,
+			clineMessages,
+			codebaseIndexConfig,
 		} = useExtensionState()
-
-		const currentTheme = useVSCodeTheme() // kilocode_change
 
 		// Find the ID and display text for the currently selected API configuration
 		const { currentConfigId, displayName } = useMemo(() => {
@@ -105,10 +106,6 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				displayName: currentApiConfigName || "", // Use the name directly for display
 			}
 		}, [listApiConfigMeta, currentApiConfigName])
-
-		// kilocode_change start
-		const { id: selectedModelId, provider: selectedProvider } = useSelectedModel(apiConfiguration)
-		// kilocode_change end
 
 		const [gitCommits, setGitCommits] = useState<any[]>([])
 		const [showDropdown, setShowDropdown] = useState(false)
@@ -211,6 +208,15 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false)
 		const [isFocused, setIsFocused] = useState(false)
 
+		// Use custom hook for prompt history navigation
+		const { handleHistoryNavigation, resetHistoryNavigation, resetOnInputChange } = usePromptHistory({
+			clineMessages,
+			taskHistory,
+			cwd,
+			inputValue,
+			setInputValue,
+		})
+
 		// Fetch git commits when Git is selected or when typing a hash.
 		useEffect(() => {
 			if (selectedType === ContextMenuOptionType.Git || /^[a-f0-9]+$/i.test(searchQuery)) {
@@ -236,6 +242,8 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				setInputValue(t("chat:enhancePromptDescription"))
 			}
 		}, [inputValue, sendingDisabled, setInputValue, t])
+
+		const allModes = useMemo(() => getAllModes(customModes), [customModes])
 
 		const queryItems = useMemo(() => {
 			return [
@@ -468,7 +476,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 								selectedType,
 								queryItems,
 								fileSearchResults,
-								getAllModes(customModes),
+								allModes,
 							)
 							const optionsLength = options.length
 
@@ -505,7 +513,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							selectedType,
 							queryItems,
 							fileSearchResults,
-							getAllModes(customModes),
+							allModes,
 						)[selectedMenuIndex]
 						if (
 							selectedOption &&
@@ -520,10 +528,17 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
 				const isComposing = event.nativeEvent?.isComposing ?? false
 
+				// Handle prompt history navigation using custom hook
+				if (handleHistoryNavigation(event, showContextMenu, isComposing)) {
+					return
+				}
+
 				if (event.key === "Enter" && !event.shiftKey && !isComposing) {
 					event.preventDefault()
 
 					if (!sendingDisabled) {
+						// Reset history navigation state when sending
+						resetHistoryNavigation()
 						onSend()
 					}
 				}
@@ -584,12 +599,15 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				inputValue,
 				selectedType,
 				queryItems,
+				allModes,
 				fileSearchResults,
+				handleHistoryNavigation,
+				resetHistoryNavigation,
+				cursorPosition,
 				customModes,
 				handleMentionSelect,
-				onSend,
-				cursorPosition,
 				justDeletedSpaceAfterMention,
+				onSend,
 				setInputValue,
 				localWorkflows, // kilocode_change
 				globalWorkflows, // kilocode_change
@@ -609,6 +627,11 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const handleInputChange = useCallback(
 			(e: React.ChangeEvent<HTMLTextAreaElement>) => {
 				const newValue = e.target.value
+				setInputValue(newValue)
+
+				// Reset history navigation when user types
+				resetOnInputChange()
+
 				const newCursorPosition = e.target.selectionStart
 				setInputValue(newValue)
 				setCursorPosition(newCursorPosition)
@@ -640,14 +663,17 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 				// kilocode_change end
 
 				if (showMenu) {
-					if (newValue.startsWith("/")) {
+					// kilocode_change start - check lastAtIndex before handling slash commands
+					const lastAtIndex = newValue.lastIndexOf("@", newCursorPosition - 1)
+
+					// if (newValue.startsWith("/")) { ⚠️ kilocode_change added lastAtIndex check
+					if (newValue.startsWith("/") && lastAtIndex === -1) {
 						// Handle slash command.
 						const query = newValue
 						setSearchQuery(query)
 						setSelectedMenuIndex(0)
 					} else {
 						// Existing @ mention handling.
-						const lastAtIndex = newValue.lastIndexOf("@", newCursorPosition - 1)
 						const query = newValue.slice(lastAtIndex + 1, newCursorPosition)
 						setSearchQuery(query)
 
@@ -687,7 +713,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					setFileSearchResults([]) // Clear file search results.
 				}
 			},
-			[setInputValue, setSearchRequestId, setFileSearchResults, setSearchLoading],
+			[setInputValue, setSearchRequestId, setFileSearchResults, setSearchLoading, resetOnInputChange],
 		)
 
 		useEffect(() => {
@@ -1046,7 +1072,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									setSelectedIndex={setSelectedMenuIndex}
 									selectedType={selectedType}
 									queryItems={queryItems}
-									modes={getAllModes(customModes)}
+									modes={allModes}
 									loading={searchLoading}
 									dynamicSearchResults={fileSearchResults}
 								/>
@@ -1206,6 +1232,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					className={cn("flex", "justify-between", "items-center", "mt-auto", "pt-0.5")}>
 					<div className={cn("flex", "items-center", "gap-1", "min-w-0")}>
 						<div className="shrink-0">
+							{/* kilocode_change: SelectDropdown instead of ModeSelector */}
 							<SelectDropdown
 								value={mode}
 								title={t("chat:selectMode")}
@@ -1238,22 +1265,25 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									vscode.postMessage({ type: "mode", text: value })
 								}}
 								shortcutText={modeShortcutText}
-								triggerClassName={cn("w-full", {
-									"bg-[#1e1e1e] border-[#333333] hover:bg-[#2d2d2d]":
-										currentTheme === "vscode-dark" || currentTheme === "vscode-high-contrast",
-									"bg-[var(--vscode-input-background)] border-[var(--vscode-input-border)] hover:bg-[var(--vscode-input-hoverBackground)]":
-										currentTheme === "vscode-light",
-								})}
+								// kilocode_change start - VSC Theme
+								triggerClassName={cn(
+									"w-full bg-[var(--background)] border-[var(--vscode-input-border)] hover:bg-[var(--color-vscode-list-hoverBackground)]",
+								)}
+								// kilocode_change end
 							/>
 						</div>
 
-						{/* kilocode_change: fixed width */}
-						{/* API configuration selector - fixed width */}
-						<div className={cn("shrink-0", "w-[70px]")}>
+						{/* kilocode_change start - hide if there is only one profile */}
+						<div
+							className={cn("flex-1", "min-w-0", "overflow-hidden", {
+								hidden: (listApiConfigMeta?.length ?? 0) < 2,
+							})}>
+							{/* kilocode_change end */}
 							<SelectDropdown
 								value={currentConfigId}
 								disabled={selectApiConfigDisabled}
 								title={t("chat:selectApiConfig")}
+								disableSearch={false}
 								placeholder={displayName}
 								options={[
 									// Pinned items first.
@@ -1313,13 +1343,12 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 									}
 								}}
 								contentClassName="max-h-[300px] overflow-y-auto"
-								// kilocode_change: add different border and background colors
-								triggerClassName={cn("w-full text-ellipsis overflow-hidden", {
-									"bg-[#1e1e1e] border-[#333333] hover:bg-[#2d2d2d]":
-										currentTheme === "vscode-dark" || currentTheme === "vscode-high-contrast",
-									"bg-[var(--vscode-input-background)] border-[var(--vscode-input-border)] hover:bg-[var(--vscode-input-hoverBackground)]":
-										currentTheme === "vscode-light",
-								})}
+								// kilocode_change start - VSC Theme
+								triggerClassName={cn(
+									"w-full text-ellipsis overflow-hidden",
+									"bg-[var(--background)] border-[var(--vscode-input-border)] hover:bg-[var(--color-vscode-list-hoverBackground)]",
+								)}
+								// kilocode_change end
 								itemClassName="group"
 								renderItem={({ type, value, label, pinned }) => {
 									if (type !== DropdownOptionType.ITEM) {
@@ -1334,8 +1363,7 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 											<div
 												className={cn("truncate min-w-0 overflow-hidden", {
 													"font-medium": isCurrentConfig,
-												})}
-												title={label}>
+												})}>
 												{label}
 											</div>
 											<div className="flex justify-end w-10 flex-shrink-0">
@@ -1346,43 +1374,38 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 													})}>
 													<Check className="size-3" />
 												</div>
-												<Button
-													variant="ghost"
-													size="icon"
-													title={pinned ? t("chat:unpin") : t("chat:pin")}
-													onClick={(e) => {
-														e.stopPropagation()
-														togglePinnedApiConfig(value)
-														vscode.postMessage({ type: "toggleApiConfigPin", text: value })
-													}}
-													className={cn("size-5", {
-														"hidden group-hover:flex": !pinned,
-														"bg-accent": pinned,
-													})}>
-													<Pin className="size-3 p-0.5 opacity-50" />
-												</Button>
+												<StandardTooltip content={pinned ? t("chat:unpin") : t("chat:pin")}>
+													<Button
+														variant="ghost"
+														size="icon"
+														onClick={(e) => {
+															e.stopPropagation()
+															togglePinnedApiConfig(value)
+															vscode.postMessage({
+																type: "toggleApiConfigPin",
+																text: value,
+															})
+														}}
+														className={cn("size-5", {
+															"hidden group-hover:flex": !pinned,
+															"bg-accent": pinned,
+														})}>
+														<Pin className="size-3 p-0.5 opacity-50" />
+													</Button>
+												</StandardTooltip>
 											</div>
 										</div>
 									)
 								}}
 							/>
 						</div>
-
-						{/* kilocode_change begin: Model display */}
-						<div
-							className="flex items-center mx-2 overflow-hidden"
-							title={`${selectedProvider}:${selectedModelId}`}>
-							<span className="text-xs text-vscode-descriptionForeground opacity-70 truncate">
-								{selectedProvider}:{selectedModelId}
-							</span>
-						</div>
-						{/* kilocode_change end */}
 					</div>
 
 					<div
 						//  kilocode_change: add ref and add hidden on small containerWidth
 						className={cn("flex", "items-center", "gap-0.5", "shrink-0", { hidden: containerWidth < 235 })}
 						ref={actionButtonsRef}>
+						{codebaseIndexConfig?.codebaseIndexEnabled && <IndexingStatusDot />}
 						<IconButton
 							iconClass={isEnhancingPrompt ? "codicon-loading" : "codicon-sparkle"}
 							title={t("chat:enhancePrompt")}

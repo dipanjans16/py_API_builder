@@ -6,6 +6,7 @@
 		"title": "Cảnh Báo Tín Dụng Thấp!",
 		"message": "Kiểm tra xem bạn có thể nạp thêm tín dụng miễn phí hoặc mua thêm không!"
 	},
+	"notLoggedInError": "Không thể hoàn thành yêu cầu, hãy đảm bảo bạn đã kết nối và đăng nhập với nhà cung cấp đã chọn.",
 	"rules": {
 		"actions": {
 			"delete": "Xóa",
@@ -46,5 +47,10 @@
 		"tokenRequired": "Mã token Kilo Code được yêu cầu để tạo thông điệp commit",
 		"activationFailed": "Kilo: Không thể kích hoạt nhà cung cấp tin nhắn commit: {{error}}",
 		"providerRegistered": "Kilo: Đã đăng ký nhà cung cấp thông điệp commit"
+	},
+	"userFeedback": {
+		"message_update_failed": "Không thể cập nhật tin nhắn",
+		"no_checkpoint_found": "Không tìm thấy điểm kiểm tra trước tin nhắn này",
+		"message_updated": "Tin nhắn đã được cập nhật"
 	}
 }

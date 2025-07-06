@@ -1,7 +1,8 @@
-import { TelemetryEventName, type TelemetryEvent, rooCodeTelemetryEventSchema } from "@roo-code/types"
+/* eslint-disable @typescript-eslint/no-unused-vars */ /* kilocode_change this file is meant to be a stub */
+import { TelemetryEventName, type TelemetryEvent, type ClineMessage } from "@roo-code/types" // kilocode_change removed rooCodeTelemetryEventSchema because unused
 import { BaseTelemetryClient } from "@roo-code/telemetry"
 
-import { getRooCodeApiUrl } from "./Config"
+// import { getRooCodeApiUrl } from "./Config" // kilocode_change
 import { AuthService } from "./AuthService"
 import { SettingsService } from "./SettingsService"
 
@@ -20,6 +21,7 @@ export class TelemetryClient extends BaseTelemetryClient {
 		)
 	}
 
+	// kilocode_change
 	private async fetch(path: string, options: RequestInit) {
 		if (!this.authService.isAuthenticated()) {
 			return
@@ -32,6 +34,7 @@ export class TelemetryClient extends BaseTelemetryClient {
 			return
 		}
 
+		/* kilocode_change
 		const response = await fetch(`${getRooCodeApiUrl()}/api/${path}`, {
 			...options,
 			headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -42,9 +45,12 @@ export class TelemetryClient extends BaseTelemetryClient {
 				`[TelemetryClient#fetch] ${options.method} ${path} -> ${response.status} ${response.statusText}`,
 			)
 		}
+		*/
 	}
 
 	public override async capture(event: TelemetryEvent) {
+		/* kilocode_change
+
 		if (!this.isTelemetryEnabled() || !this.isEventCapturable(event.event)) {
 			if (this.debug) {
 				console.info(`[TelemetryClient#capture] Skipping event: ${event.event}`)
@@ -77,6 +83,69 @@ export class TelemetryClient extends BaseTelemetryClient {
 		} catch (error) {
 			console.error(`[TelemetryClient#capture] Error sending telemetry event: ${error}`)
 		}
+		*/
+	}
+
+	public async backfillMessages(messages: ClineMessage[], taskId: string): Promise<void> {
+		/* kilocode_change
+		if (!this.authService.isAuthenticated()) {
+			if (this.debug) {
+				console.info(`[TelemetryClient#backfillMessages] Skipping: Not authenticated`)
+			}
+			return
+		}
+
+		const token = this.authService.getSessionToken()
+
+		if (!token) {
+			console.error(`[TelemetryClient#backfillMessages] Unauthorized: No session token available.`)
+			return
+		}
+
+		try {
+			const mergedProperties = await this.getEventProperties({
+				event: TelemetryEventName.TASK_MESSAGE,
+				properties: { taskId },
+			})
+
+			const formData = new FormData()
+			formData.append("taskId", taskId)
+			formData.append("properties", JSON.stringify(mergedProperties))
+
+			formData.append(
+				"file",
+				new File([JSON.stringify(messages)], "task.json", {
+					type: "application/json",
+				}),
+			)
+
+			if (this.debug) {
+				console.info(
+					`[TelemetryClient#backfillMessages] Uploading ${messages.length} messages for task ${taskId}`,
+				)
+			}
+
+			// Custom fetch for multipart - don't set Content-Type header (let browser set it)
+			const response = await fetch(`${getRooCodeApiUrl()}/api/events/backfill`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					// Note: No Content-Type header - browser will set multipart/form-data with boundary
+				},
+				body: formData,
+			})
+
+			if (!response.ok) {
+				console.error(
+					`[TelemetryClient#backfillMessages] POST events/backfill -> ${response.status} ${response.statusText}`,
+				)
+			} else if (this.debug) {
+				console.info(`[TelemetryClient#backfillMessages] Successfully uploaded messages for task ${taskId}`)
+			}
+		} catch (error) {
+			console.error(`[TelemetryClient#backfillMessages] Error uploading messages: ${error}`)
+		}
+		*/
 	}
 
 	public override updateTelemetryState(_didUserOptIn: boolean) {}

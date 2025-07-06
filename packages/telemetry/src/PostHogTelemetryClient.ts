@@ -1,4 +1,4 @@
-import { PostHog } from "posthog-node"
+// import { PostHog } from "posthog-node" // kilocode_change
 import * as vscode from "vscode"
 
 import { TelemetryEventName, type TelemetryEvent } from "@roo-code/types"
@@ -11,8 +11,10 @@ import { BaseTelemetryClient } from "./BaseTelemetryClient"
  * Respects user privacy settings and VSCode's global telemetry configuration.
  */
 export class PostHogTelemetryClient extends BaseTelemetryClient {
-	private client: PostHog
+	// private client: PostHog // kilocode_change
 	private distinctId: string = vscode.env.machineId
+	// Git repository properties that should be filtered out
+	private readonly gitPropertyNames = ["repositoryUrl", "repositoryName", "defaultBranch"]
 
 	constructor(debug = false) {
 		super(
@@ -23,7 +25,20 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 			debug,
 		)
 
-		this.client = new PostHog(process.env.POSTHOG_API_KEY || "", { host: "https://us.i.posthog.com" })
+		// this.client = new PostHog(process.env.POSTHOG_API_KEY || "", { host: "https://us.i.posthog.com" }) // kilocode_change
+	}
+
+	/**
+	 * Filter out git repository properties for PostHog telemetry
+	 * @param propertyName The property name to check
+	 * @returns Whether the property should be included in telemetry events
+	 */
+	protected override isPropertyCapturable(propertyName: string): boolean {
+		// Filter out git repository properties
+		if (this.gitPropertyNames.includes(propertyName)) {
+			return false
+		}
+		return true
 	}
 
 	public override async capture(event: TelemetryEvent): Promise<void> {
@@ -39,11 +54,12 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 			console.info(`[PostHogTelemetryClient#capture] ${event.event}`)
 		}
 
-		this.client.capture({
-			distinctId: this.distinctId,
-			event: event.event,
-			properties: await this.getEventProperties(event),
-		})
+		// kilocode_change
+		// this.client.capture({
+		// 	distinctId: this.distinctId,
+		// 	event: event.event,
+		// 	properties: await this.getEventProperties(event),
+		// })
 	}
 
 	/**
@@ -66,13 +82,13 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 
 		// Update PostHog client state based on telemetry preference.
 		if (this.telemetryEnabled) {
-			this.client.optIn()
+			// this.client.optIn() // kilocode_change
 		} else {
-			this.client.optOut()
+			// this.client.optOut() // kilocode_change
 		}
 	}
 
 	public override async shutdown(): Promise<void> {
-		await this.client.shutdown()
+		// await this.client.shutdown() // kilocode_change
 	}
 }

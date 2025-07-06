@@ -2,10 +2,16 @@
 	"info": {
 		"settings_imported": "Paramètres importés avec succès."
 	},
+	"userFeedback": {
+		"message_update_failed": "Échec de la mise à jour du message",
+		"no_checkpoint_found": "Aucun point de contrôle trouvé avant ce message",
+		"message_updated": "Message mis à jour avec succès"
+	},
 	"lowCreditWarning": {
 		"title": "Avertissement de Crédit Faible !",
 		"message": "Vérifiez si vous pouvez recharger avec des crédits gratuits ou en acheter davantage !"
 	},
+	"notLoggedInError": "Impossible de traiter la demande, assure-toi que tu es connecté et identifié auprès du fournisseur sélectionné.",
 	"rules": {
 		"actions": {
 			"delete": "Supprimer",

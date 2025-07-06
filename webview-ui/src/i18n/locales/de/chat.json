@@ -12,7 +12,16 @@
 		"export": "Aufgabenverlauf exportieren",
 		"delete": "Aufgabe löschen (Shift + Klick zum Überspringen der Bestätigung)",
 		"share": "Aufgabe teilen",
-		"condenseContext": "Kontext intelligent komprimieren"
+		"condenseContext": "Kontext intelligent komprimieren",
+		"shareWithOrganization": "Mit Organisation teilen",
+		"shareWithOrganizationDescription": "Nur Mitglieder deiner Organisation können zugreifen",
+		"sharePublicly": "Öffentlich teilen",
+		"sharePubliclyDescription": "Jeder mit dem Link kann zugreifen",
+		"connectToCloud": "Mit Cloud verbinden",
+		"connectToCloudDescription": "Melde dich bei Kilo Code Cloud an, um Aufgaben zu teilen",
+		"sharingDisabledByOrganization": "Freigabe von der Organisation deaktiviert",
+		"shareSuccessOrganization": "Organisationslink in die Zwischenablage kopiert",
+		"shareSuccessPublic": "Öffentlicher Link in die Zwischenablage kopiert"
 	},
 	"history": {
 		"title": "Verlauf"
@@ -81,7 +90,7 @@
 	"onboarding": "<strong>Deine Aufgabenliste in diesem Arbeitsbereich ist leer.</strong> Beginne mit der Eingabe einer Aufgabe unten. Du bist dir nicht sicher, wie du anfangen sollst? Lies mehr darüber, was Kilo Code für dich tun kann, in <DocsLink>den Dokumenten</DocsLink>.",
 	"rooTips": {
 		"boomerangTasks": {
-			"title": "Bumerang-Aufgaben",
+			"title": "Aufgaben-Orchestrierung",
 			"description": "Teile Aufgaben in kleinere, überschaubare Teile auf."
 		},
 		"stickyModels": {
@@ -99,6 +108,7 @@
 	},
 	"selectMode": "Interaktionsmodus auswählen",
 	"selectApiConfig": "API-Konfiguration auswählen",
+	"selectModelConfig": "Modell auswählen",
 	"enhancePrompt": "Prompt mit zusätzlichem Kontext verbessern",
 	"addImages": "Bilder zur Nachricht hinzufügen",
 	"sendMessage": "Nachricht senden",
@@ -108,6 +118,12 @@
 	"dragFiles": "Shift halten, um Dateien einzufügen",
 	"dragFilesImages": "Shift halten, um Dateien/Bilder einzufügen",
 	"enhancePromptDescription": "Die Schaltfläche 'Prompt verbessern' hilft, deine Anfrage durch zusätzlichen Kontext, Klarstellungen oder Umformulierungen zu verbessern. Versuche, hier eine Anfrage einzugeben und klicke erneut auf die Schaltfläche, um zu sehen, wie es funktioniert.",
+	"modeSelector": {
+		"title": "Modi",
+		"marketplace": "Modus-Marketplace",
+		"settings": "Modus-Einstellungen",
+		"description": "Spezialisierte Personas, die Roos Verhalten anpassen."
+	},
 	"errorReadingFile": "Fehler beim Lesen der Datei:",
 	"noValidImages": "Keine gültigen Bilder wurden verarbeitet",
 	"separator": "Trennlinie",
@@ -152,13 +168,15 @@
 		"didRead": "Kilo Code hat diese Datei gelesen:",
 		"wantsToEdit": "Kilo Code möchte diese Datei bearbeiten:",
 		"wantsToEditOutsideWorkspace": "Kilo Code möchte diese Datei außerhalb des Arbeitsbereichs bearbeiten:",
+		"wantsToEditProtected": "Kilo Code möchte eine geschützte Konfigurationsdatei bearbeiten:",
 		"wantsToCreate": "Kilo Code möchte eine neue Datei erstellen:",
 		"wantsToSearchReplace": "Kilo Code möchte in dieser Datei suchen und ersetzen:",
 		"didSearchReplace": "Kilo Code hat Suchen und Ersetzen in dieser Datei durchgeführt:",
 		"wantsToInsert": "Kilo Code möchte Inhalte in diese Datei einfügen:",
 		"wantsToInsertWithLineNumber": "Kilo Code möchte Inhalte in diese Datei in Zeile {{lineNumber}} einfügen:",
 		"wantsToInsertAtEnd": "Kilo Code möchte Inhalte am Ende dieser Datei anhängen:",
-		"wantsToReadMultiple": "Kilo Code möchte mehrere Dateien lesen:"
+		"wantsToReadMultiple": "Kilo Code möchte mehrere Dateien lesen:",
+		"wantsToApplyBatchChanges": "Kilo Code möchte Änderungen an mehreren Dateien vornehmen:"
 	},
 	"directoryOperations": {
 		"wantsToViewTopLevel": "Kilo Code möchte die Dateien auf oberster Ebene in diesem Verzeichnis anzeigen:",
@@ -168,7 +186,15 @@
 		"wantsToViewDefinitions": "Kilo Code möchte Quellcode-Definitionsnamen in diesem Verzeichnis anzeigen:",
 		"didViewDefinitions": "Kilo Code hat Quellcode-Definitionsnamen in diesem Verzeichnis angezeigt:",
 		"wantsToSearch": "Kilo Code möchte dieses Verzeichnis nach <code>{{regex}}</code> durchsuchen:",
-		"didSearch": "Kilo Code hat dieses Verzeichnis nach <code>{{regex}}</code> durchsucht:"
+		"didSearch": "Kilo Code hat dieses Verzeichnis nach <code>{{regex}}</code> durchsucht:",
+		"wantsToSearchOutsideWorkspace": "Kilo Code möchte dieses Verzeichnis (außerhalb des Arbeitsbereichs) nach <code>{{regex}}</code> durchsuchen:",
+		"didSearchOutsideWorkspace": "Kilo Code hat dieses Verzeichnis (außerhalb des Arbeitsbereichs) nach <code>{{regex}}</code> durchsucht:",
+		"wantsToViewTopLevelOutsideWorkspace": "Kilo Code möchte die Dateien auf oberster Ebene in diesem Verzeichnis (außerhalb des Arbeitsbereichs) anzeigen:",
+		"didViewTopLevelOutsideWorkspace": "Kilo Code hat die Dateien auf oberster Ebene in diesem Verzeichnis (außerhalb des Arbeitsbereichs) angezeigt:",
+		"wantsToViewRecursiveOutsideWorkspace": "Kilo Code möchte rekursiv alle Dateien in diesem Verzeichnis (außerhalb des Arbeitsbereichs) anzeigen:",
+		"didViewRecursiveOutsideWorkspace": "Kilo Code hat rekursiv alle Dateien in diesem Verzeichnis (außerhalb des Arbeitsbereichs) angezeigt:",
+		"wantsToViewDefinitionsOutsideWorkspace": "Kilo Code möchte Quellcode-Definitionsnamen in diesem Verzeichnis (außerhalb des Arbeitsbereichs) anzeigen:",
+		"didViewDefinitionsOutsideWorkspace": "Kilo Code hat Quellcode-Definitionsnamen in diesem Verzeichnis (außerhalb des Arbeitsbereichs) angezeigt:"
 	},
 	"commandOutput": "Befehlsausgabe",
 	"response": "Antwort",
@@ -219,11 +245,11 @@
 	},
 	"announcement": {
 		"title": "🎉 Roo Code {{version}} veröffentlicht",
-		"description": "Roo Code {{version}} bringt leistungsstarke neue Funktionen und Verbesserungen basierend auf deinem Feedback.",
+		"description": "Roo Code {{version}} bringt wichtige neue Funktionen und Verbesserungen basierend auf deinem Feedback.",
 		"whatsNew": "Was ist neu",
-		"feature1": "<bold>Intelligente Kontext-Kondensierung standardmäßig aktiviert</bold>: Kontext-Kondensierung ist jetzt standardmäßig aktiviert mit konfigurierbaren Einstellungen für automatische Kondensierung",
-		"feature2": "<bold>Manueller Kondensierungs-Button</bold>: Neuer Button im Task-Header ermöglicht es dir, Kontext-Kondensierung jederzeit manuell auszulösen",
-		"feature3": "<bold>Erweiterte Kondensierungs-Einstellungen</bold>: Feinabstimmung wann und wie automatische Kondensierung über die <contextSettingsLink>Kontext-Einstellungen</contextSettingsLink> erfolgt",
+		"feature1": "<bold>Roo Marketplace Launch</bold>: Der Marketplace ist jetzt live! Entdecke und installiere Modi und MCPs einfacher denn je.",
+		"feature2": "<bold>Gemini 2.5 Modelle</bold>: Unterstützung für neue Gemini 2.5 Pro, Flash und Flash Lite Modelle hinzugefügt.",
+		"feature3": "<bold>Excel-Datei-Unterstützung & mehr</bold>: Excel (.xlsx) Datei-Unterstützung hinzugefügt sowie zahlreiche Fehlerbehebungen und Verbesserungen!",
 		"hideButton": "Ankündigung ausblenden",
 		"detailsDiscussLinks": "Erhalte mehr Details und diskutiere auf <discordLink>Discord</discordLink> und <redditLink>Reddit</redditLink> 🚀"
 	},
@@ -284,5 +310,12 @@
 		"deny": {
 			"title": "Alle ablehnen"
 		}
+	},
+	"indexingStatus": {
+		"ready": "Index bereit",
+		"indexing": "Indizierung {{percentage}}%",
+		"indexed": "Indiziert",
+		"error": "Index-Fehler",
+		"status": "Index-Status"
 	}
 }

@@ -4,6 +4,7 @@ import * as path from "path"
 import delay from "delay"
 
 import { CommandExecutionStatus } from "@roo-code/types"
+import { TelemetryService } from "@roo-code/telemetry"
 
 import { Task } from "../task/Task"
 
@@ -191,6 +192,7 @@ export async function executeCommand(
 
 	if (terminalProvider === "vscode") {
 		callbacks.onNoShellIntegration = async (error: string) => {
+			TelemetryService.instance.captureShellIntegrationError(cline.taskId)
 			shellIntegrationError = error
 		}
 	}
@@ -266,10 +268,6 @@ export async function executeCommand(
 
 		let workingDirInfo = ` within working directory '${workingDir.toPosix()}'`
 		const newWorkingDir = terminal.getCurrentWorkingDirectory()
-
-		if (newWorkingDir !== workingDir) {
-			workingDirInfo += `\nNOTICE: Your command changed the working directory for this terminal to '${newWorkingDir.toPosix()}' so you MUST adjust future commands accordingly because they will be executed in this directory`
-		}
 
 		return [false, `Command executed in terminal ${workingDirInfo}. ${exitStatus}\nOutput:\n${result}`]
 	} else {
