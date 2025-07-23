@@ -23,9 +23,14 @@
 			"mcp": "Server MCP"
 		},
 		"provider": {
+			"account": "Account Kilo Code",
 			"apiKey": "Chiave API Kilo Code",
 			"login": "Accedi a Kilo Code",
-			"logout": "Disconnetti da Kilo Code"
+			"logout": "Disconnetti da Kilo Code",
+			"providerRouting": {
+				"title": "Kilo Code - Routing dei provider OpenRouter",
+				"description": "Kilo Code instrada le richieste ai migliori provider disponibili per il tuo modello. Per impostazione predefinita, le richieste vengono bilanciate tra i provider principali per massimizzare i tempi di attività. Tuttavia, puoi scegliere un provider specifico da utilizzare per questo modello."
+			}
 		},
 		"contextManagement": {
 			"allowVeryLargeReads": {
@@ -116,5 +121,39 @@
 		"editCancel": "Annulla",
 		"send": "Invia",
 		"restoreAndSend": "Ripristina e Invia"
+	},
+	"ideaSuggestionsBox": {
+		"newHere": "Nuovo qui?",
+		"suggestionText": "<suggestionButton>Clicca qui</suggestionButton> per un'idea fantastica, poi tocca <sendIcon /> e guardami fare magie!",
+		"ideas": {
+			"idea1": "Crea una sfera 3D rotante e luminosa che risponde ai movimenti del mouse. Fai funzionare l'app nel browser.",
+			"idea2": "Crea un sito web portfolio per uno sviluppatore software Python",
+			"idea3": "Crea un mockup di app finanziaria nel browser. Poi testa se funziona",
+			"idea4": "Crea un sito web directory contenente i migliori modelli di generazione video AI attualmente",
+			"idea5": "Crea un generatore di gradienti CSS che esporta fogli di stile personalizzati e mostra un'anteprima live",
+			"idea6": "Genera carte che rivelano contenuti dinamici magnificamente quando ci si passa sopra",
+			"idea7": "Crea un campo stellare interattivo rilassante che si muove con i gesti del mouse"
+		}
+	},
+	"ghost": {
+		"title": "Assistenza in linea",
+		"settings": {
+			"enableQuickInlineTaskKeybinding": {
+				"label": "Attività Rapida In Linea",
+				"description": "Hai solo bisogno di una modifica rapida? Seleziona del codice (o anche no!) e premi Cmd+I. Descrivi il tuo obiettivo in linguaggio semplice (\"crea un componente React con queste props\", \"aggiungi la gestione degli errori a questa funzione\") e ottieni molteplici suggerimenti pronti all'uso direttamente nel tuo editor. <DocsLink>Vedi scorciatoia</DocsLink>"
+			},
+			"enableAutoInlineTaskKeybinding": {
+				"label": "Attività Automatica in Linea",
+				"description": "Hai bisogno di una correzione rapida, di completare o refactoring del codice? Kilo userà il contesto circostante per offrire miglioramenti immediati, mantenendoti concentrato. <DocsLink>Vedi scorciatoia</DocsLink>"
+			},
+			"provider": "Fornitore",
+			"apiConfigId": {
+				"label": "Configurazione API",
+				"current": "Usa la configurazione API attualmente selezionata",
+				"description": "Seleziona una configurazione API da utilizzare per i prompt di Inline Assist, o semplicemente usa quella attualmente selezionata"
+			},
+			"triggers": "Trigger",
+			"keybindingDescription": "Le funzionalità di Inline Assist sono attivate da comandi. Puoi configurare le <DocsLink>scorciatoie da tastiera qui</DocsLink>."
+		}
 	}
 }

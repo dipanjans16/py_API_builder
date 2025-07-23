@@ -28,7 +28,7 @@ class VSCodeAPIWrapper {
 	 * @remarks When running webview code inside a web browser, postMessage will instead
 	 * log the given message to the console.
 	 *
-	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
+	 * @param message Arbitrary data (must be JSON serializable) to send to the extension context.
 	 */
 	public postMessage(message: WebviewMessage) {
 		if (this.vsCodeApi) {
@@ -78,3 +78,12 @@ class VSCodeAPIWrapper {
 
 // Exports class singleton to prevent multiple invocations of acquireVsCodeApi.
 export const vscode = new VSCodeAPIWrapper()
+
+// kilocode_change start
+// Make vscode available globally - this allows the playwright tests
+// to post messages directly so we can setup provider credentials
+// without having to go through the Settings UI in every test.
+if (typeof window !== "undefined") {
+	;(window as unknown as { vscode: VSCodeAPIWrapper }).vscode = vscode
+}
+// kilocode_change end
