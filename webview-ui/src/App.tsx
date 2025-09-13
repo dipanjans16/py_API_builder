@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react"
 import { useEvent } from "react-use"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import { ExtensionMessage } from "@roo/ExtensionMessage"
 import TranslationProvider from "./i18n/TranslationContext"
-// import { MarketplaceViewStateManager } from "./components/marketplace/MarketplaceViewStateManager" // kilocode_change: rendered in settings
+import { MarketplaceViewStateManager } from "./components/marketplace/MarketplaceViewStateManager"
 
 import { vscode } from "./utils/vscode"
 import { telemetryClient } from "./utils/TelemetryClient"
 import { TelemetryEventName } from "@roo-code/types"
+import { initializeSourceMaps, exposeSourceMapsForDebugging } from "./utils/sourceMapInitializer"
 import { ExtensionStateContextProvider, useExtensionState } from "./context/ExtensionStateContext"
 import ChatView, { ChatViewRef } from "./components/chat/ChatView"
 import HistoryView from "./components/history/HistoryView"
@@ -16,19 +17,22 @@ import SettingsView, { SettingsViewRef } from "./components/settings/SettingsVie
 import WelcomeView from "./components/kilocode/Welcome/WelcomeView" // kilocode_change
 import ProfileView from "./components/kilocode/profile/ProfileView" // kilocode_change
 import McpView from "./components/mcp/McpView"
-// import { MarketplaceView } from "./components/marketplace/MarketplaceView" // kilocode_change: rendered in settings
+import { MarketplaceView } from "./components/marketplace/MarketplaceView"
 import ModesView from "./components/modes/ModesView"
 import { HumanRelayDialog } from "./components/human-relay/HumanRelayDialog"
 import BottomControls from "./components/kilocode/BottomControls" // kilocode_change
-// import { AccountView } from "./components/account/AccountView" // kilocode_change: we have our own profile view
+import { MemoryService } from "./services/MemoryService" // kilocode_change
+import { CheckpointRestoreDialog } from "./components/chat/CheckpointRestoreDialog"
 import { DeleteMessageDialog, EditMessageDialog } from "./components/chat/MessageModificationConfirmationDialog"
+import ErrorBoundary from "./components/ErrorBoundary"
+// import { AccountView } from "./components/account/AccountView" // kilocode_change: we have our own profile view
+// import { CloudView } from "./components/cloud/CloudView" // kilocode_change: not rendering this
 import { useAddNonInteractiveClickListener } from "./components/ui/hooks/useNonInteractiveClick"
-import { KiloCodeErrorBoundary } from "./kilocode/KiloCodeErrorBoundary"
 import { TooltipProvider } from "./components/ui/tooltip"
 import { STANDARD_TOOLTIP_DELAY } from "./components/ui/standard-tooltip"
 import { useKiloIdentity } from "./utils/kilocode/useKiloIdentity"
 
-type Tab = "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account" | "profile" // kilocode_change: add "profile"
+type Tab = "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account" | "cloud" | "profile" // kilocode_change: add "profile"
 
 interface HumanRelayDialogState {
 	isOpen: boolean
@@ -39,18 +43,21 @@ interface HumanRelayDialogState {
 interface DeleteMessageDialogState {
 	isOpen: boolean
 	messageTs: number
+	hasCheckpoint: boolean
 }
 
 interface EditMessageDialogState {
 	isOpen: boolean
 	messageTs: number
 	text: string
+	hasCheckpoint: boolean
 	images?: string[]
 }
 
 // Memoize dialog components to prevent unnecessary re-renders
 const MemoizedDeleteMessageDialog = React.memo(DeleteMessageDialog)
 const MemoizedEditMessageDialog = React.memo(EditMessageDialog)
+const MemoizedCheckpointRestoreDialog = React.memo(CheckpointRestoreDialog)
 const MemoizedHumanRelayDialog = React.memo(HumanRelayDialog)
 
 const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]>, Tab>> = {
@@ -61,7 +68,7 @@ const tabsByMessageAction: Partial<Record<NonNullable<ExtensionMessage["action"]
 	historyButtonClicked: "history",
 	profileButtonClicked: "profile",
 	marketplaceButtonClicked: "marketplace",
-	accountButtonClicked: "account",
+	// cloudButtonClicked: "cloud", // kilocode_change: no cloud
 }
 
 const App = () => {
@@ -80,7 +87,7 @@ const App = () => {
 	} = useExtensionState()
 
 	// Create a persistent state manager
-	// const marketplaceStateManager = useMemo(() => new MarketplaceViewStateManager(), []) // kilocode_change: rendered in settings
+	const marketplaceStateManager = useMemo(() => new MarketplaceViewStateManager(), [])
 
 	const [showAnnouncement, setShowAnnouncement] = useState(false)
 	const [tab, setTab] = useState<Tab>("chat")
@@ -94,12 +101,14 @@ const App = () => {
 	const [deleteMessageDialogState, setDeleteMessageDialogState] = useState<DeleteMessageDialogState>({
 		isOpen: false,
 		messageTs: 0,
+		hasCheckpoint: false,
 	})
 
 	const [editMessageDialogState, setEditMessageDialogState] = useState<EditMessageDialogState>({
 		isOpen: false,
 		messageTs: 0,
 		text: "",
+		hasCheckpoint: false,
 		images: [],
 	})
 
@@ -108,8 +117,11 @@ const App = () => {
 
 	const switchTab = useCallback(
 		(newTab: Tab) => {
-			// Check MDM compliance before allowing tab switching
-			if (mdmCompliant === false && newTab !== "account") {
+			// Only check MDM compliance if mdmCompliant is explicitly false (meaning there's an MDM policy and user is non-compliant)
+			// If mdmCompliant is undefined or true, allow tab switching
+			if (mdmCompliant === false && newTab !== "cloud") {
+				// Notify the user that authentication is required by their organization
+				vscode.postMessage({ type: "showMdmAuthRequiredNotification" })
 				return
 			}
 
@@ -169,7 +181,11 @@ const App = () => {
 			}
 
 			if (message.type === "showDeleteMessageDialog" && message.messageTs) {
-				setDeleteMessageDialogState({ isOpen: true, messageTs: message.messageTs })
+				setDeleteMessageDialogState({
+					isOpen: true,
+					messageTs: message.messageTs,
+					hasCheckpoint: message.hasCheckpoint || false,
+				})
 			}
 
 			if (message.type === "showEditMessageDialog" && message.messageTs && message.text) {
@@ -177,6 +193,7 @@ const App = () => {
 					isOpen: true,
 					messageTs: message.messageTs,
 					text: message.text,
+					hasCheckpoint: message.hasCheckpoint || false,
 					images: message.images || [],
 				})
 			}
@@ -203,12 +220,32 @@ const App = () => {
 	useEffect(() => {
 		if (didHydrateState) {
 			telemetryClient.updateTelemetryState(telemetrySetting, telemetryKey, telemetryDistinctId)
+
+			// kilocode_change start
+			const memoryService = new MemoryService()
+			memoryService.start()
+			return () => memoryService.stop()
+			// kilocode_change end
 		}
 	}, [telemetrySetting, telemetryKey, telemetryDistinctId, didHydrateState])
 	// kilocode_change end
 
 	// Tell the extension that we are ready to receive messages.
 	useEffect(() => vscode.postMessage({ type: "webviewDidLaunch" }), [])
+
+	// Initialize source map support for better error reporting
+	useEffect(() => {
+		// Initialize source maps for better error reporting in production
+		initializeSourceMaps()
+
+		// Expose source map debugging utilities in production
+		if (process.env.NODE_ENV === "production") {
+			exposeSourceMapsForDebugging()
+		}
+
+		// Log initialization for debugging
+		console.debug("App initialized with source map support")
+	}, [])
 
 	// Focus the WebView when non-interactive content is clicked (only in editor/tab mode)
 	useAddNonInteractiveClickListener(
@@ -244,9 +281,22 @@ const App = () => {
 			)}
 			{/* kilocode_change: add profileview */}
 			{tab === "profile" && <ProfileView onDone={() => switchTab("chat")} />}
-			{/* kilocode_change: rendered in settings */}
-			{/* {tab === "marketplace" && (
-				<MarketplaceView stateManager={marketplaceStateManager} onDone={() => switchTab("chat")} />
+			{tab === "marketplace" && (
+				<MarketplaceView
+					stateManager={marketplaceStateManager}
+					onDone={() => switchTab("chat")}
+					// kilocode_change: targetTab="mode"
+					targetTab="mode"
+				/>
+			)}
+			{/* kilocode_change: no cloud view */}
+			{/* {tab === "cloud" && (
+				<CloudView
+					userInfo={cloudUserInfo}
+					isAuthenticated={cloudIsAuthenticated}
+					cloudApiUrl={cloudApiUrl}
+					onDone={() => switchTab("chat")}
+				/>
 			)} */}
 			{/* kilocode_change: we have our own profile view */}
 			{/* {tab === "account" && (
@@ -266,30 +316,65 @@ const App = () => {
 				onSubmit={(requestId, text) => vscode.postMessage({ type: "humanRelayResponse", requestId, text })}
 				onCancel={(requestId) => vscode.postMessage({ type: "humanRelayCancel", requestId })}
 			/>
-			<MemoizedDeleteMessageDialog
-				open={deleteMessageDialogState.isOpen}
-				onOpenChange={(open) => setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
-				onConfirm={() => {
-					vscode.postMessage({
-						type: "deleteMessageConfirm",
-						messageTs: deleteMessageDialogState.messageTs,
-					})
-					setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: false }))
-				}}
-			/>
-			<MemoizedEditMessageDialog
-				open={editMessageDialogState.isOpen}
-				onOpenChange={(open) => setEditMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
-				onConfirm={() => {
-					vscode.postMessage({
-						type: "editMessageConfirm",
-						messageTs: editMessageDialogState.messageTs,
-						text: editMessageDialogState.text,
-						images: editMessageDialogState.images,
-					})
-					setEditMessageDialogState((prev) => ({ ...prev, isOpen: false }))
-				}}
-			/>
+			{deleteMessageDialogState.hasCheckpoint ? (
+				<MemoizedCheckpointRestoreDialog
+					open={deleteMessageDialogState.isOpen}
+					type="delete"
+					hasCheckpoint={deleteMessageDialogState.hasCheckpoint}
+					onOpenChange={(open: boolean) => setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
+					onConfirm={(restoreCheckpoint: boolean) => {
+						vscode.postMessage({
+							type: "deleteMessageConfirm",
+							messageTs: deleteMessageDialogState.messageTs,
+							restoreCheckpoint,
+						})
+						setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: false }))
+					}}
+				/>
+			) : (
+				<MemoizedDeleteMessageDialog
+					open={deleteMessageDialogState.isOpen}
+					onOpenChange={(open: boolean) => setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
+					onConfirm={() => {
+						vscode.postMessage({
+							type: "deleteMessageConfirm",
+							messageTs: deleteMessageDialogState.messageTs,
+						})
+						setDeleteMessageDialogState((prev) => ({ ...prev, isOpen: false }))
+					}}
+				/>
+			)}
+			{editMessageDialogState.hasCheckpoint ? (
+				<MemoizedCheckpointRestoreDialog
+					open={editMessageDialogState.isOpen}
+					type="edit"
+					hasCheckpoint={editMessageDialogState.hasCheckpoint}
+					onOpenChange={(open: boolean) => setEditMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
+					onConfirm={(restoreCheckpoint: boolean) => {
+						vscode.postMessage({
+							type: "editMessageConfirm",
+							messageTs: editMessageDialogState.messageTs,
+							text: editMessageDialogState.text,
+							restoreCheckpoint,
+						})
+						setEditMessageDialogState((prev) => ({ ...prev, isOpen: false }))
+					}}
+				/>
+			) : (
+				<MemoizedEditMessageDialog
+					open={editMessageDialogState.isOpen}
+					onOpenChange={(open: boolean) => setEditMessageDialogState((prev) => ({ ...prev, isOpen: open }))}
+					onConfirm={() => {
+						vscode.postMessage({
+							type: "editMessageConfirm",
+							messageTs: editMessageDialogState.messageTs,
+							text: editMessageDialogState.text,
+							images: editMessageDialogState.images,
+						})
+						setEditMessageDialogState((prev) => ({ ...prev, isOpen: false }))
+					}}
+				/>
+			)}
 			{/* kilocode_change */}
 			{/* Chat, modes and history view contain their own bottom controls */}
 			{!["chat", "modes", "history"].includes(tab) && (
@@ -304,21 +389,17 @@ const App = () => {
 const queryClient = new QueryClient()
 
 const AppWithProviders = () => (
-	<ExtensionStateContextProvider>
-		<TranslationProvider>
-			<QueryClientProvider client={queryClient}>
-				<TooltipProvider delayDuration={STANDARD_TOOLTIP_DELAY}>
-					<App />
-				</TooltipProvider>
-			</QueryClientProvider>
-		</TranslationProvider>
-	</ExtensionStateContextProvider>
+	<ErrorBoundary>
+		<ExtensionStateContextProvider>
+			<TranslationProvider>
+				<QueryClientProvider client={queryClient}>
+					<TooltipProvider delayDuration={STANDARD_TOOLTIP_DELAY}>
+						<App />
+					</TooltipProvider>
+				</QueryClientProvider>
+			</TranslationProvider>
+		</ExtensionStateContextProvider>
+	</ErrorBoundary>
 )
 
-const AppWithKiloCodeErrorBoundary = () => (
-	<KiloCodeErrorBoundary>
-		<AppWithProviders />
-	</KiloCodeErrorBoundary>
-)
-
-export default AppWithKiloCodeErrorBoundary // kilocode_change
+export default AppWithProviders

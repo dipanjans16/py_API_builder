@@ -13,10 +13,16 @@ import { ApiStream } from "../transform/stream"
 
 import { BaseProvider } from "./base-provider"
 import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
+import { fetchWithTimeout } from "./kilocode/fetchWithTimeout"
+
+const LMSTUDIO_TIMEOUT_MS = 3_600_000 // kilocode_change
+import { getModels, getModelsFromCache } from "./fetchers/modelCache"
+import { handleOpenAIError } from "./utils/openai-error-handler"
 
 export class LmStudioHandler extends BaseProvider implements SingleCompletionHandler {
 	protected options: ApiHandlerOptions
 	private client: OpenAI
+	private readonly providerName = "LM Studio"
 
 	constructor(options: ApiHandlerOptions) {
 		super()
@@ -24,6 +30,8 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 		this.client = new OpenAI({
 			baseURL: (this.options.lmStudioBaseUrl || "http://localhost:1234") + "/v1",
 			apiKey: "noop",
+			timeout: LMSTUDIO_TIMEOUT_MS, // kilocode_change
+			fetch: fetchWithTimeout(LMSTUDIO_TIMEOUT_MS), // kilocode_change
 		})
 	}
 
@@ -84,7 +92,12 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 				params.draft_model = this.options.lmStudioDraftModelId
 			}
 
-			const results = await this.client.chat.completions.create(params)
+			let results
+			try {
+				results = await this.client.chat.completions.create(params)
+			} catch (error) {
+				throw handleOpenAIError(error, this.providerName)
+			}
 
 			const matcher = new XmlMatcher(
 				"think",
@@ -131,9 +144,17 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 	}
 
 	override getModel(): { id: string; info: ModelInfo } {
-		return {
-			id: this.options.lmStudioModelId || "",
-			info: openAiModelInfoSaneDefaults,
+		const models = getModelsFromCache("lmstudio")
+		if (models && this.options.lmStudioModelId && models[this.options.lmStudioModelId]) {
+			return {
+				id: this.options.lmStudioModelId,
+				info: models[this.options.lmStudioModelId],
+			}
+		} else {
+			return {
+				id: this.options.lmStudioModelId || "",
+				info: openAiModelInfoSaneDefaults,
+			}
 		}
 	}
 
@@ -152,7 +173,12 @@ export class LmStudioHandler extends BaseProvider implements SingleCompletionHan
 				params.draft_model = this.options.lmStudioDraftModelId
 			}
 
-			const response = await this.client.chat.completions.create(params)
+			let response
+			try {
+				response = await this.client.chat.completions.create(params)
+			} catch (error) {
+				throw handleOpenAIError(error, this.providerName)
+			}
 			return response.choices[0]?.message.content || ""
 		} catch (error) {
 			throw new Error(

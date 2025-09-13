@@ -28,7 +28,10 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 			debug,
 		)
 
-		this.client = new PostHog(process.env.KILOCODE_POSTHOG_API_KEY || "", { host: "https://us.i.posthog.com" })
+		this.client = new PostHog(process.env.KILOCODE_POSTHOG_API_KEY || "", {
+			host: "https://us.i.posthog.com",
+			disableGeoip: false, // kilocode_change
+		})
 	}
 
 	/**
@@ -95,9 +98,18 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 	}
 
 	// kilocode_change start
-	public override captureException(error: Error, properties?: Record<string | number, unknown>): void {
+	public override async captureException(error: Error, properties?: Record<string | number, unknown>): Promise<void> {
 		if (this.isTelemetryEnabled()) {
-			this.client.captureException(error, this.distinctId, properties)
+			let providerProperties = {}
+			try {
+				providerProperties = (await this.providerRef?.deref()?.getTelemetryProperties()) || {}
+			} catch (error) {
+				console.error("Error getting provider properties", error)
+			}
+			this.client.captureException(error, this.distinctId, {
+				...(providerProperties || {}),
+				...(properties || {}),
+			})
 		}
 	}
 
@@ -117,7 +129,7 @@ export class PostHogTelemetryClient extends BaseTelemetryClient {
 		}
 		const id = ++this.counter
 		try {
-			const response = await fetch("https://kilocode.ai/api/profile", {
+			const response = await fetch("https://api.kilocode.ai/api/profile", {
 				headers: {
 					Authorization: `Bearer ${kilocodeToken}`,
 					"Content-Type": "application/json",

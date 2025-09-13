@@ -33,10 +33,15 @@ export const toolNames = [
 	"new_task",
 	"fetch_instructions",
 	"codebase_search",
-	"new_rule", // kilocode_change
-	"report_bug", // kilocode_change
-	"condense", // kilocode_change
+	// kilocode_change start
+	"edit_file",
+	"new_rule",
+	"report_bug",
+	"condense",
+	// kilocode_change end
 	"update_todo_list",
+	"run_slash_command",
+	"generate_image",
 ] as const
 
 export const toolNamesSchema = z.enum(toolNames)

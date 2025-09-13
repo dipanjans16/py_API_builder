@@ -41,6 +41,7 @@
 		"could_not_open_file_generic": "Nelze otevřít soubor!",
 		"checkpoint_timeout": "Vypršel časový limit při pokusu o obnovení checkpointu.",
 		"checkpoint_failed": "Obnovení checkpointu selhalo.",
+		"git_not_installed": "Git je vyžadován pro funkci checkpointů. Prosím nainstaluj Git pro aktivaci checkpointů.",
 		"no_workspace": "Nejprve prosím otevři složku projektu",
 		"update_support_prompt": "Aktualizace support promptu selhala",
 		"reset_support_prompt": "Reset support promptu selhal",
@@ -73,6 +74,7 @@
 		"no_internet": "Žádné internetové připojení. Zkontroluj prosím své síťové připojení a zkus to znovu.",
 		"url_forbidden": "Přístup k této webové stránce je zakázán. Web může blokovat automatizovaný přístup nebo vyžadovat autentizaci.",
 		"url_page_not_found": "Stránka nebyla nalezena. Zkontroluj prosím, zda je URL správná.",
+		"url_request_aborted": "Požadavek na načtení URL byl přerušen. Může se to stát, pokud stránka blokuje automatický přístup, vyžaduje autentifikaci nebo je problém se sítí. Zkuste to znovu nebo zkontrolujte, zda je URL dostupná v běžném prohlížeči.",
 		"url_fetch_failed": "Načtení obsahu URL selhalo: {{error}}",
 		"url_fetch_error_with_url": "Chyba při načítání obsahu pro {{url}}: {{error}}",
 		"command_timeout": "Spuštění příkazu vypršelo po {{seconds}} sekundách",
@@ -83,12 +85,20 @@
 		"share_task_not_found": "Úloha nebyla nalezena nebo byl přístup odepřen.",
 		"mode_import_failed": "Import režimu selhal: {{error}}",
 		"delete_rules_folder_failed": "Smazání složky pravidel selhalo: {{rulesFolderPath}}. Chyba: {{error}}",
+		"command_not_found": "Příkaz '{{name}}' nebyl nalezen",
+		"open_command_file": "Nepodařilo se otevřít soubor příkazu",
+		"delete_command": "Nepodařilo se smazat příkaz",
+		"no_workspace_for_project_command": "Pro projektový příkaz nebyla nalezena žádná složka workspace",
+		"command_already_exists": "Příkaz \"{{commandName}}\" již existuje",
+		"create_command_failed": "Nepodařilo se vytvořit příkaz",
+		"command_template_content": "---\ndescription: \"Stručný popis toho, co tento příkaz dělá\"\n---\n\nToto je nový slash příkaz. Upravte tento soubor pro přizpůsobení chování příkazu.",
 		"claudeCode": {
 			"processExited": "Proces Claude Code skončil s kódem {{exitCode}}.",
 			"errorOutput": "Chybový výstup: {{output}}",
 			"processExitedWithError": "Proces Claude Code skončil s kódem {{exitCode}}. Chybový výstup: {{output}}",
 			"stoppedWithReason": "Claude Code se zastavil s důvodem: {{reason}}",
-			"apiKeyModelPlanMismatch": "API klíče a plány předplatného umožňují různé modely. Ujisti se, že vybraný model je zahrnut v tvém plánu."
+			"apiKeyModelPlanMismatch": "API klíče a plány předplatného umožňují různé modely. Ujisti se, že vybraný model je zahrnut v tvém plánu.",
+			"notFound": "Spustitelný soubor Claude Code '{{claudePath}}' nebyl nalezen.\n\nNainstalujte prosím Claude Code CLI:\n1. Navštivte {{installationUrl}} pro stažení Claude Code\n2. Postupujte podle pokynů pro instalaci pro váš operační systém\n3. Ujistěte se, že příkaz 'claude' je dostupný v PATH\n4. Alternativně nakonfigurujte vlastní cestu v nastavení Kilo Code pod 'Cesta Claude Code'\n\nPůvodní chyba: {{originalError}}"
 		},
 		"geminiCli": {
 			"oauthLoadFailed": "Nepodařilo se načíst OAuth přihlašovací údaje. Nejprve se prosím autentizujte: {{error}}",
@@ -99,6 +109,29 @@
 			"badRequest": "Špatný požadavek: {{details}}",
 			"apiError": "Chyba Gemini CLI API: {{error}}",
 			"completionError": "Chyba dokončení Gemini CLI: {{error}}"
+		},
+		"qwenCode": {
+			"oauthLoadFailed": "Nepodařilo se načíst OAuth přihlašovací údaje. Nejprve se prosím autentizujte: {{error}}"
+		},
+		"gemini": {
+			"generate_stream": "Chyba generování kontextového proudu Gemini: {{error}}",
+			"generate_complete_prompt": "Chyba dokončení Gemini: {{error}}",
+			"sources": "Zdroje:"
+		},
+		"cerebras": {
+			"authenticationFailed": "Autentifikace Cerebras API selhala. Zkontrolujte prosím, že váš API klíč je platný a nevypršel.",
+			"accessForbidden": "Přístup k Cerebras API je zakázán. Váš API klíč možná nemá přístup k požadovanému modelu nebo funkci.",
+			"rateLimitExceeded": "Překročen limit rychlosti Cerebras API. Počkejte prosím před dalším požadavkem.",
+			"serverError": "Chyba serveru Cerebras API ({{status}}). Zkuste to prosím později.",
+			"genericError": "Chyba Cerebras API ({{status}}): {{message}}",
+			"noResponseBody": "Chyba Cerebras API: Žádné tělo odpovědi",
+			"completionError": "Chyba dokončení Cerebras: {{error}}"
+		},
+		"roo": {
+			"authenticationRequired": "Poskytovatel Roo vyžaduje cloudovou autentizaci. Prosím přihlas se do Roo Code Cloud."
+		},
+		"api": {
+			"invalidKeyInvalidChars": "API klíč obsahuje neplatné znaky."
 		}
 	},
 	"warnings": {
@@ -131,7 +164,8 @@
 	},
 	"buttons": {
 		"save": "Uložit",
-		"edit": "Upravit"
+		"edit": "Upravit",
+		"learn_more": "Zjistit více"
 	},
 	"tasks": {
 		"canceled": "Chyba úlohy: Byla zastavena a zrušena uživatelem.",
@@ -158,11 +192,17 @@
 			"deleteFailed": "Nepodařilo se smazat vlastní režim: {{error}}",
 			"resetFailed": "Nepodařilo se resetovat vlastní režimy: {{error}}",
 			"modeNotFound": "Chyba zápisu: Režim nebyl nalezen",
-			"noWorkspaceForProject": "Pro projektově specifický režim nebyla nalezena žádná složka workspace"
+			"noWorkspaceForProject": "Pro projektově specifický režim nebyla nalezena žádná složka workspace",
+			"rulesCleanupFailed": "Režim byl úspěšně smazán, ale nepodařilo se smazat složku pravidel v {{rulesFolderPath}}. Možná ji budete muset smazat ručně."
 		},
 		"scope": {
 			"project": "projekt",
 			"global": "globální"
+		}
+	},
+	"marketplace": {
+		"mode": {
+			"rulesCleanupFailed": "Režim byl úspěšně odstraněn, ale nepodařilo se smazat složku pravidel v {{rulesFolderPath}}. Možná ji budete muset smazat ručně."
 		}
 	},
 	"mdm": {
@@ -170,6 +210,9 @@
 			"cloud_auth_required": "Tvá organizace vyžaduje autentizaci Kilo Code Cloud. Prosím přihlas se pro pokračování.",
 			"organization_mismatch": "Musíš být autentizován s účtem Kilo Code Cloud tvé organizace.",
 			"verification_failed": "Nelze ověřit autentizaci organizace."
+		},
+		"info": {
+			"organization_requires_auth": "Tvá organizace vyžaduje autentizaci."
 		}
 	},
 	"prompts": {
@@ -178,6 +221,11 @@
 			"description": "Jsi si jistý, že chceš smazat tento {{scope}} režim? Toto také smaže související složku pravidel na: {{rulesFolderPath}}",
 			"descriptionNoRules": "Jsi si jistý, že chceš smazat tento vlastní režim?",
 			"confirm": "Smazat"
+		}
+	},
+	"commands": {
+		"preventCompletionWithOpenTodos": {
+			"description": "Zabránit dokončení úlohy, když jsou v seznamu úkolů neúplné položky"
 		}
 	}
 }

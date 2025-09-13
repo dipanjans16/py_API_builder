@@ -3,6 +3,7 @@ dist
 out
 out-*
 node_modules
+package-lock.json
 coverage/
 mock/
 .DS_Store
@@ -10,6 +11,7 @@ mock/
 
 # Builds
 bin/
+bin-unpacked/
 *.vsix
 
 # Local prompts and rules
@@ -50,3 +52,13 @@ logs
 
 # Nix / Direnv
 .direnv
+
+# Exclude Conport Directory (MCP server)
+context_portal/
+
+# Submodules
+deps/vscode/*
+!deps/vscode/.git
+
+# Qdrant
+qdrant_storage/

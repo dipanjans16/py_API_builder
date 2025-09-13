@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
+import * as vscode from "vscode"
 
+import { RooCodeEventName } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
 
 import { Task } from "../task/Task"
@@ -14,6 +16,21 @@ import {
 	AskFinishSubTaskApproval,
 } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
+import { Package } from "../../shared/package"
+import { getCommitRangeForNewCompletion } from "../checkpoints/kilocode/seeNewChanges"
+
+// kilocode_change start
+async function getClineMessageOptions(task: Task) {
+	const commitRange = await getCommitRangeForNewCompletion(task)
+	return (
+		commitRange && {
+			metadata: {
+				kiloCode: { commitRange },
+			},
+		}
+	)
+}
+// kilocode_change end
 
 export async function attemptCompletionTool(
 	cline: Task,
@@ -27,6 +44,27 @@ export async function attemptCompletionTool(
 ) {
 	const result: string | undefined = block.params.result
 	const command: string | undefined = block.params.command
+
+	// Get the setting for preventing completion with open todos from VSCode configuration
+	const preventCompletionWithOpenTodos = vscode.workspace
+		.getConfiguration(Package.name)
+		.get<boolean>("preventCompletionWithOpenTodos", false)
+
+	// Check if there are incomplete todos (only if the setting is enabled)
+	const hasIncompleteTodos = cline.todoList && cline.todoList.some((todo) => todo.status !== "completed")
+
+	if (preventCompletionWithOpenTodos && hasIncompleteTodos) {
+		cline.consecutiveMistakeCount++
+		cline.recordToolError("attempt_completion")
+
+		pushToolResult(
+			formatResponse.toolError(
+				"Cannot complete task while there are incomplete todos. Please finish all todos before attempting completion.",
+			),
+		)
+
+		return
+	}
 
 	try {
 		const lastMessage = cline.clineMessages.at(-1)
@@ -43,15 +81,23 @@ export async function attemptCompletionTool(
 				} else {
 					// last message is completion_result
 					// we have command string, which means we have the result as well, so finish it (doesnt have to exist yet)
-					await cline.say("completion_result", removeClosingTag("result", result), undefined, false)
+					await cline.say(
+						"completion_result",
+						removeClosingTag("result", result),
+						undefined,
+						false,
+						undefined,
+						undefined,
+						await getClineMessageOptions(cline), // kilocode_change
+					)
 
 					TelemetryService.instance.captureTaskCompleted(cline.taskId)
-					cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
+					cline.emit(RooCodeEventName.TaskCompleted, cline.taskId, cline.getTokenUsage(), cline.toolUsage)
 
 					await cline.ask("command", removeClosingTag("command", command), block.partial).catch(() => {})
 				}
 			} else {
-				// no command, still outputting partial result
+				// No command, still outputting partial result
 				await cline.say("completion_result", removeClosingTag("result", result), undefined, block.partial)
 			}
 			return
@@ -67,9 +113,17 @@ export async function attemptCompletionTool(
 
 			// Command execution is permanently disabled in attempt_completion
 			// Users must use execute_command tool separately before attempt_completion
-			await cline.say("completion_result", result, undefined, false)
+			await cline.say(
+				"completion_result",
+				result,
+				undefined,
+				false,
+				undefined,
+				undefined,
+				await getClineMessageOptions(cline), //kilocode_change
+			)
 			TelemetryService.instance.captureTaskCompleted(cline.taskId)
-			cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
+			cline.emit(RooCodeEventName.TaskCompleted, cline.taskId, cline.getTokenUsage(), cline.toolUsage)
 
 			if (cline.parentTask) {
 				const didApprove = await askFinishSubTaskApproval()

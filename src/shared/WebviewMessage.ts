@@ -1,14 +1,16 @@
 import { z } from "zod"
 
-import type {
-	ProviderSettings,
-	PromptComponent,
-	ModeConfig,
-	InstallMarketplaceItemOptions,
-	MarketplaceItem,
-	ShareVisibility,
+import {
+	type ProviderSettings,
+	type PromptComponent,
+	type ModeConfig,
+	type InstallMarketplaceItemOptions,
+	type MarketplaceItem,
+	type ShareVisibility,
+	type QueuedMessage,
+	marketplaceItemSchema,
+	CommitRange, // kilocode_change
 } from "@roo-code/types"
-import { marketplaceItemSchema } from "@roo-code/types"
 
 import { Mode } from "./modes"
 
@@ -26,6 +28,8 @@ export type AudioType = "notification" | "celebration" | "progress_loop"
 export interface UpdateTodoListPayload {
 	todos: any[]
 }
+
+export type EditQueuedMessagePayload = Pick<QueuedMessage, "id" | "text" | "images">
 
 export interface WebviewMessage {
 	type:
@@ -77,6 +81,7 @@ export interface WebviewMessage {
 		| "requestOllamaModels"
 		| "requestLmStudioModels"
 		| "requestVsCodeLmModels"
+		| "requestHuggingFaceModels"
 		| "openImage"
 		| "saveImage"
 		| "openFile"
@@ -89,6 +94,7 @@ export interface WebviewMessage {
 		| "alwaysAllowMcp"
 		| "alwaysAllowModeSwitch"
 		| "allowedMaxRequests"
+		| "allowedMaxCost"
 		| "alwaysAllowSubtasks"
 		| "alwaysAllowUpdateTodoList"
 		| "autoCondenseContext"
@@ -116,7 +122,9 @@ export interface WebviewMessage {
 		| "toggleMcpServer"
 		| "updateMcpTimeout"
 		| "fuzzyMatchThreshold"
+		| "morphApiKey" // kilocode_change: Morph fast apply - global setting
 		| "writeDelayMs"
+		| "diagnosticsEnabled"
 		| "enhancePrompt"
 		| "enhancedPrompt"
 		| "draggedImages"
@@ -125,6 +133,7 @@ export interface WebviewMessage {
 		| "submitEditedMessage"
 		| "editMessageConfirm"
 		| "terminalOutputLineLimit"
+		| "terminalOutputCharacterLimit"
 		| "terminalShellIntegrationTimeout"
 		| "terminalShellIntegrationDisabled"
 		| "terminalCommandDelay"
@@ -136,6 +145,7 @@ export interface WebviewMessage {
 		| "terminalCompressProgressBar"
 		| "mcpEnabled"
 		| "enableMcpServerCreation"
+		| "remoteControlEnabled"
 		| "searchCommits"
 		| "alwaysApproveResubmit"
 		| "requestDelaySeconds"
@@ -148,8 +158,9 @@ export interface WebviewMessage {
 		| "systemPrompt"
 		| "enhancementApiConfigId"
 		| "commitMessageApiConfigId" // kilocode_change
-		| "autocompleteApiConfigId" // kilocode_change
+		| "terminalCommandApiConfigId" // kilocode_change
 		| "ghostServiceSettings" // kilocode_change
+		| "includeTaskHistoryInEnhance"
 		| "updateExperimental"
 		| "autoApprovalEnabled"
 		| "updateCustomMode"
@@ -158,6 +169,7 @@ export interface WebviewMessage {
 		| "openCustomModesSettings"
 		| "checkpointDiff"
 		| "checkpointRestore"
+		| "seeNewChanges" // kilocode_change
 		| "deleteMcpServer"
 		| "maxOpenTabsContext"
 		| "maxWorkspaceFiles"
@@ -173,8 +185,12 @@ export interface WebviewMessage {
 		| "remoteBrowserEnabled"
 		| "language"
 		| "maxReadFileLine"
+		| "maxImageFileSize"
+		| "maxTotalImageSize"
 		| "maxConcurrentFileReads"
 		| "allowVeryLargeReads" // kilocode_change
+		| "includeDiagnosticMessages"
+		| "maxDiagnosticMessages"
 		| "searchFiles"
 		| "setHistoryPreviewCollapsed"
 		| "showFeedbackOptions" // kilocode_change
@@ -190,7 +206,9 @@ export interface WebviewMessage {
 		| "fetchProfileDataRequest" // kilocode_change
 		| "profileDataResponse" // kilocode_change
 		| "fetchBalanceDataRequest" // kilocode_change
+		| "shopBuyCredits" // kilocode_change
 		| "balanceDataResponse" // kilocode_change
+		| "updateProfileData" // kilocode_change
 		| "condense" // kilocode_change
 		| "toggleWorkflow" // kilocode_change
 		| "refreshRules" // kilocode_change
@@ -198,7 +216,7 @@ export interface WebviewMessage {
 		| "createRuleFile" // kilocode_change
 		| "deleteRuleFile" // kilocode_change
 		| "hasOpenedModeSelector"
-		| "accountButtonClicked"
+		| "cloudButtonClicked"
 		| "rooCloudSignIn"
 		| "rooCloudSignOut"
 		| "condenseTaskContextRequest"
@@ -210,6 +228,9 @@ export interface WebviewMessage {
 		| "focusPanelRequest"
 		| "profileThresholds"
 		| "setHistoryPreviewCollapsed"
+		| "clearUsageData" // kilocode_change
+		| "getUsageData" // kilocode_change
+		| "usageDataResponse" // kilocode_change
 		| "showTaskTimeline" // kilocode_change
 		| "toggleTaskFavorite" // kilocode_change
 		| "fixMermaidSyntax" // kilocode_change
@@ -229,6 +250,7 @@ export interface WebviewMessage {
 		| "profileThresholds"
 		| "editMessage" // kilocode_change
 		| "systemNotificationsEnabled" // kilocode_change
+		| "dismissNotificationId" // kilocode_change
 		| "shareTaskSuccess"
 		| "exportMode"
 		| "exportModeResult"
@@ -238,9 +260,23 @@ export interface WebviewMessage {
 		| "checkRulesDirectoryResult"
 		| "saveCodeIndexSettingsAtomic"
 		| "requestCodeIndexSecretStatus"
+		| "fetchKilocodeNotifications"
+		| "requestCommands"
+		| "openCommandFile"
+		| "deleteCommand"
+		| "createCommand"
+		| "insertTextIntoTextarea"
+		| "showMdmAuthRequiredNotification"
+		| "imageGenerationSettings"
+		| "openRouterImageApiKey"
+		| "kiloCodeImageApiKey"
+		| "openRouterImageGenerationSelectedModel"
+		| "queueMessage"
+		| "removeQueuedMessage"
+		| "editQueuedMessage"
 	text?: string
 	editedMessageContent?: string
-	tab?: "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account"
+	tab?: "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "cloud"
 	disabled?: boolean
 	context?: string
 	dataUri?: string
@@ -266,6 +302,7 @@ export interface WebviewMessage {
 	isGlobal?: boolean // kilocode_change
 	filename?: string // kilocode_change
 	ruleType?: string // kilocode_change
+	notificationId?: string // kilocode_change
 	// kilocode_change end
 	serverName?: string
 	toolName?: string
@@ -288,8 +325,10 @@ export interface WebviewMessage {
 	hasSystemPromptOverride?: boolean
 	terminalOperation?: "continue" | "abort"
 	messageTs?: number
+	restoreCheckpoint?: boolean
 	historyPreviewCollapsed?: boolean
 	filters?: { type?: string; search?: string; tags?: string[] }
+	settings?: any
 	url?: string // For openExternal
 	mpItem?: MarketplaceItem
 	mpInstallOptions?: InstallMarketplaceItemOptions
@@ -301,7 +340,13 @@ export interface WebviewMessage {
 		// Global state settings
 		codebaseIndexEnabled: boolean
 		codebaseIndexQdrantUrl: string
-		codebaseIndexEmbedderProvider: "openai" | "ollama" | "openai-compatible" | "gemini"
+		codebaseIndexEmbedderProvider:
+			| "openai"
+			| "ollama"
+			| "openai-compatible"
+			| "gemini"
+			| "mistral"
+			| "vercel-ai-gateway"
 		codebaseIndexEmbedderBaseUrl?: string
 		codebaseIndexEmbedderModelId: string
 		codebaseIndexEmbedderModelDimension?: number // Generic dimension for all providers
@@ -314,10 +359,22 @@ export interface WebviewMessage {
 		codeIndexQdrantApiKey?: string
 		codebaseIndexOpenAiCompatibleApiKey?: string
 		codebaseIndexGeminiApiKey?: string
+		codebaseIndexMistralApiKey?: string
+		codebaseIndexVercelAiGatewayApiKey?: string
 	}
 }
 
 // kilocode_change begin
+export type OrganizationRole = "owner" | "admin" | "member"
+
+export type UserOrganizationWithApiKey = {
+	id: string
+	name: string
+	balance: number
+	role: OrganizationRole
+	apiKey: string
+}
+
 export type ProfileData = {
 	kilocodeToken: string
 	user: {
@@ -326,6 +383,7 @@ export type ProfileData = {
 		email: string
 		image: string
 	}
+	organizations?: UserOrganizationWithApiKey[]
 }
 
 export interface ProfileDataResponsePayload {
@@ -339,6 +397,10 @@ export interface BalanceDataResponsePayload {
 	success: boolean
 	data?: any // Replace 'any' with a more specific type if known for balance
 	error?: string
+}
+
+export interface SeeNewChangesPayload {
+	commitRange: CommitRange
 }
 // kilocode_change end
 
@@ -379,11 +441,15 @@ export type InstallMarketplaceItemWithParametersPayload = z.infer<
 >
 
 export type WebViewMessagePayload =
+	// kilocode_change start
+	| ProfileDataResponsePayload
+	| BalanceDataResponsePayload
+	| SeeNewChangesPayload
+	// kilocode_change end
 	| CheckpointDiffPayload
 	| CheckpointRestorePayload
 	| IndexingStatusPayload
 	| IndexClearedPayload
-	| ProfileDataResponsePayload // kilocode_change
-	| BalanceDataResponsePayload // kilocode_change
 	| InstallMarketplaceItemWithParametersPayload
 	| UpdateTodoListPayload
+	| EditQueuedMessagePayload

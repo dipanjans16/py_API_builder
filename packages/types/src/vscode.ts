@@ -37,7 +37,7 @@ export const commandIds = [
 	"historyButtonClicked",
 	"marketplaceButtonClicked",
 	"popoutButtonClicked",
-	"accountButtonClicked",
+	"cloudButtonClicked",
 	"settingsButtonClicked",
 
 	"openInNewTab",
@@ -59,6 +59,8 @@ export const commandIds = [
 	"focusChatInput", // kilocode_change
 	"importSettings", // kilocode_change
 	"exportSettings", // kilocode_change
+	"generateTerminalCommand", // kilocode_change
+	"handleExternalUri", // kilocode_change - for JetBrains plugin URL forwarding
 	"focusPanel",
 ] as const
 

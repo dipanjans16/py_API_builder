@@ -3,8 +3,8 @@
 		"greeting": "Willkommen bei Kilo Code!",
 		"introText1": "Kilo Code ist ein kostenloser Open-Source-KI-Coding-Agent.",
 		"introText2": "Er funktioniert mit den neuesten KI-Modellen wie Claude 4 Sonnet, Gemini 2.5 Pro, GPT-4.1 und über 450 weiteren.",
-		"introText3": "Erstelle ein kostenloses Konto und erhalte $20 an Tokens zur Nutzung mit jedem KI-Modell.",
-		"ctaButton": "Kostenloses Konto erstellen",
+		"introText3": "Erstelle ein kostenloses Konto und erhalte bis zu $25 an Tokens zur Nutzung mit jedem KI-Modell.",
+		"ctaButton": "Loslegen",
 		"manualModeButton": "Eigenen API-Schlüssel verwenden",
 		"alreadySignedUp": "Bereits registriert?",
 		"loginText": "Hier anmelden"
@@ -12,6 +12,21 @@
 	"lowCreditWarning": {
 		"addCredit": "Guthaben hinzufügen",
 		"lowBalance": "Ihr Kilo Code Guthaben ist niedrig"
+	},
+	"invalidModel": {
+		"alphaPeriodEnded": "🎉 Die Alpha-Phase für {{model}} ist beendet! Wechsle zu einem anderen Modell, um fortzufahren.",
+		"notAllowedForTeam": "⚠️ Deine Organisation erlaubt die Nutzung des {{model}} Modells nicht. Wechsle zu einem anderen Modell, um fortzufahren.",
+		"modelUnavailable": "⚠️ Das Modell {{model}} ist nicht verfügbar. Wechsle zu einem anderen Modell, um fortzufahren.",
+		"continueWith": "Weiter mit {{model}}",
+		"continue": "Weiter"
+	},
+	"pricing": {
+		"costUnknown": "Kosten unbekannt",
+		"costUnknownDescription": "Der API-Anbieter hat keine Kostendaten bereitgestellt oder die Anfrage wurde abgebrochen.",
+		"freeModelsDescription": "Kostenlose Modelle können Ratenbeschränkungen haben. Nutze den Link unten, um deine kostenlose Modellnutzung zu optimieren!",
+		"freeModelsLink": "Kostenlose und Budget-Modelloptionen entdecken",
+		"openRouterMarkup": "Der Kilo Code Anbieter umfasst alle OpenRouter-Modelle, ohne Aufschlag und mit 0% Provision!",
+		"switchToKiloCode": "Zu Kilo Code wechseln"
 	},
 	"notifications": {
 		"toolRequest": "Werkzeuganfrage wartet auf Genehmigung",
@@ -27,9 +42,35 @@
 			"apiKey": "Kilo Code API-Schlüssel",
 			"login": "Bei Kilo Code anmelden",
 			"logout": "Von Kilo Code abmelden",
+			"automaticFetch": "Die neuesten Modelle sind automatisch in Kilo Code verfügbar. Wenn du dir nicht sicher bist, welches Modell du wählen sollst, funktioniert Kilo Code am besten mit den empfohlenen Modellen, die oben in <strong>fetter Schrift</strong> aufgeführt sind.",
 			"providerRouting": {
-				"title": "Kilo Code - OpenRouter-Anbieter-Routing",
-				"description": "Kilo Code leitet Anfragen an die besten verfügbaren Anbieter für dein Modell weiter. Standardmäßig werden Anfragen über die Top-Anbieter verteilt, um die Betriebszeit zu maximieren. Du kannst jedoch einen bestimmten Anbieter für dieses Modell auswählen."
+				"title": "Anbieter-Routing",
+				"managedByOrganization": "Die Anbieter-Routing-Einstellungen werden von deiner Organisation verwaltet.",
+				"description": "Kilo Code leitet Anfragen an die besten verfügbaren Anbieter für dein Modell weiter. Standardmäßig werden Anfragen über die Top-Anbieter verteilt, um die Betriebszeit zu maximieren. Du kannst jedoch einen bestimmten Anbieter für dieses Modell auswählen.",
+				"sorting": {
+					"default": "Standard-Anbieter-Sortierung",
+					"price": "Anbieter mit niedrigeren Preisen bevorzugen",
+					"throughput": "Anbieter mit höherem Durchsatz bevorzugen",
+					"latency": "Anbieter mit niedrigerer Latenz bevorzugen"
+				},
+				"dataCollection": {
+					"default": "Keine Datenrichtlinie festgelegt",
+					"allow": "Anbieter-Datensammlung erlauben",
+					"deny": "Anbieter-Datensammlung verweigern"
+				}
+			}
+		},
+		"modelInfo": {
+			"contextWindow": "Kontextfenster",
+			"providerBreakdown": "Anbieter-Preis- und Funktionsübersicht",
+			"averageKiloCodeCost": "Das sind die durchschnittlichen tatsächlichen Ausgaben für Kilo Code mit diesem Modell in der letzten Woche. Sie können niedriger sein als der angegebene Preis aufgrund der Nutzung des Prompt-Caches.",
+			"table": {
+				"provider": "Anbieter",
+				"context": "Der Endpunkt kann diese Anzahl von Token verarbeiten (Eingabe + Ausgabe).",
+				"inputPrice": "Kosten pro Million Token für den Prompt.",
+				"outputPrice": "Kosten pro Million Token für die Vervollständigung.",
+				"cacheReadPrice": "Kosten pro Million Token für das Lesen aus dem Cache.",
+				"cacheWritePrice": "Kosten pro Million Token für das Schreiben in den Cache."
 			}
 		},
 		"contextManagement": {
@@ -44,13 +85,24 @@
 			"testButton": "Benachrichtigung testen",
 			"testTitle": "Kilo Code",
 			"testMessage": "Dies ist eine Testbenachrichtigung von Kilo Code."
+		},
+		"terminal": {
+			"commandGenerator": {
+				"provider": "Generator für Terminal-Befehle",
+				"apiConfigId": {
+					"label": "API-Konfiguration",
+					"current": "Aktuelle Konfiguration verwenden",
+					"description": "Wähle aus, welche API-Konfiguration für die Generierung von Terminal-Befehlen verwendet werden soll. Belasse es bei \"Aktuelle Konfiguration verwenden\", um Ihre Standardeinstellungen zu nutzen."
+				}
+			}
 		}
 	},
 	"chat": {
 		"condense": {
 			"wantsToCondense": "Kilo Code möchte deine Unterhaltung zusammenfassen",
 			"condenseConversation": "Unterhaltung zusammenfassen"
-		}
+		},
+		"seeNewChanges": "Neue Änderungen anzeigen"
 	},
 	"newTaskPreview": {
 		"task": "Aufgabe"
@@ -60,7 +112,16 @@
 		"dashboard": "Dashboard",
 		"logOut": "Abmelden",
 		"currentBalance": "AKTUELLES GUTHABEN",
-		"loading": "Lädt..."
+		"loading": "Lädt...",
+		"organization": "Organisation",
+		"personal": "Persönlich",
+		"shop": {
+			"title": "Credits kaufen",
+			"popular": "Beliebt",
+			"credits": "Credits",
+			"action": "Jetzt kaufen",
+			"viewAll": "Alle Preisoptionen anzeigen"
+		}
 	},
 	"docs": "Dokumentation",
 	"rules": {
@@ -136,24 +197,64 @@
 		}
 	},
 	"ghost": {
-		"title": "Inline-Unterstützung",
+		"title": "Autocomplete",
 		"settings": {
-			"enableQuickInlineTaskKeybinding": {
-				"label": "Schnelle Inline-Aufgabe",
-				"description": "Brauchst du nur eine schnelle Änderung? Wähle etwas Code aus (oder auch nicht!) und drücke Cmd+I. Beschreibe dein Ziel in einfachem Deutsch (\"erstelle eine React-Komponente mit diesen Props\", \"füge Fehlerbehandlung zu dieser Funktion hinzu\") und erhalte mehrere, sofort einsetzbare Vorschläge direkt in deinem Editor. <DocsLink>Siehe Tastenkombination</DocsLink>"
+			"autoTrigger": "Auto-Auslösung",
+			"triggers": "Auslöser",
+			"keybindingDescription": "Autocomplete-Funktionen können durch Befehle ausgelöst werden. Du kannst die <DocsLink>Tastenkombinationen hier</DocsLink> konfigurieren.",
+			"enableAutoTrigger": {
+				"label": "Autocomplete aktivieren",
+				"description": "Wenn aktiviert, löst Kilo Code automatisch Autocomplete aus, wenn du aufhörst zu tippen. Dies kann für schnelle Korrekturen und Vorschläge nützlich sein."
 			},
-			"enableAutoInlineTaskKeybinding": {
-				"label": "Auto Inline Aufgabe",
-				"description": "Brauchen Sie eine schnelle Korrektur, Vervollständigung oder Umstrukturierung? Kilo nutzt den umliegenden Kontext, um sofortige Verbesserungen anzubieten und Sie im Flow zu halten. <DocsLink>Tastenkombination anzeigen</DocsLink>"
+			"autoTriggerDelay": {
+				"label": "Auto-Auslöseverzögerung",
+				"description": "Die Verzögerung in Sekunden, bevor Kilo Code Autocomplete auslöst, nachdem du aufgehört hast zu tippen. Eine kürzere Verzögerung bedeutet schnellere Vorschläge, kann aber ressourcenintensiver sein."
+			},
+			"enableQuickInlineTaskKeybinding": {
+				"label": "Schnellaufgabe",
+				"description": "Brauchst du nur eine schnelle Änderung? Wähle etwas Code aus (oder auch nicht!) und drücke Cmd+I. Beschreibe dein Ziel in einfachem Deutsch (\"erstelle eine React-Komponente mit diesen Props\", \"füge Fehlerbehandlung zu dieser Funktion hinzu\"), und erhalte mehrere, sofort verwendbare Vorschläge direkt in deinem Editor. <DocsLink>Tastenkombination ansehen</DocsLink>"
+			},
+			"enableSmartInlineTaskKeybinding": {
+				"label": "Manuelles Autocomplete",
+				"description": "Brauchst du eine schnelle Korrektur, Vervollständigung oder Refaktorierung? Kilo wird den umgebenden Kontext nutzen, um sofortige Verbesserungen anzubieten und dich im Flow zu halten. <DocsLink>Tastenkombination ansehen</DocsLink>"
+			},
+			"enableCustomProvider": {
+				"label": "Benutzerdefinierten Anbieter verwenden",
+				"description": "Autocomplete verwendet standardmäßig deine KiloCode / OpenRouter / Mistral-Anmeldedaten, um das Codestral-Modell zu verwenden"
 			},
 			"provider": "Anbieter",
 			"apiConfigId": {
 				"label": "API-Konfiguration",
 				"current": "Aktuell ausgewählte API-Konfiguration verwenden",
-				"description": "Wähle eine API-Konfiguration für Inline-Assist-Prompts aus oder verwende einfach die aktuell ausgewählte"
-			},
-			"triggers": "Auslöser",
-			"keybindingDescription": "Inline-Assistenzfunktionen werden durch Befehle ausgelöst. Sie können die <DocsLink>Tastaturkürzel hier konfigurieren</DocsLink>."
+				"description": "Wähle eine API-Konfiguration für Autocomplete-Prompts aus oder verwende einfach die aktuell ausgewählte"
+			}
 		}
+	},
+	"virtualProvider": {
+		"title": "Virtuelle Kontingent-Fallback-Anbieter-Einstellungen",
+		"description": "Konfiguriere eine Liste von Profilen, jedes mit eigenen Kontingentbeschränkungen. Wenn die Kontingentbeschränkungen eines Anbieters erreicht sind, wird das nächste Profil in der Liste verwendet, bis keines mehr übrig ist.",
+		"profileLabel": "Profil {{number}}",
+		"primaryProfileLabel": "Profil {{number}} (Primär)",
+		"moveProfileUp": "Profil nach oben verschieben",
+		"moveProfileDown": "Profil nach unten verschieben",
+		"removeProfile": "Profil entfernen",
+		"selectProfilePlaceholder": "Profil auswählen...",
+		"addProfile": "Profil hinzufügen",
+		"noProfilesAvailable": "Keine Profileprofile verfügbar. Bitte konfiguriere zuerst mindestens ein nicht-virtuelles Anbieterprofil.",
+		"dangerZoneTitle": "Gefahrenbereich",
+		"dangerZoneDescription": "Diese Aktionen sind destruktiv und können nicht rückgängig gemacht werden.",
+		"clearUsageData": "Nutzungsdaten löschen",
+		"confirmClearTitle": "Bist du sicher?",
+		"confirmClearDescription": "Dies wird alle gespeicherten Nutzungsdaten für virtuelle Anbieter dauerhaft löschen. Diese Aktion kann nicht rückgängig gemacht werden.",
+		"tokensLabel": "Token",
+		"perHour": "Pro Stunde",
+		"perMinute": "Pro Minute",
+		"requestsLabel": "Anfragen",
+		"perDay": "Pro Tag"
+	},
+	"imageWarnings": {
+		"modelNoImageSupport": "Bilder werden vom aktuellen Modell nicht unterstützt.",
+		"maxImagesReached": "Maximal 20 Bilder pro Nachricht. Entfernen Sie einige Bilder, um weitere hinzuzufügen.",
+		"imagesRemovedNoSupport": "Bilder entfernt, vom Modell nicht unterstützt."
 	}
 }

@@ -1,4 +1,22 @@
 // Mocks must come first, before imports
+vi.mock("vscode", () => ({
+	env: {
+		language: "en",
+	},
+	workspace: {
+		workspaceFolders: [{ uri: { fsPath: "/test/path" } }],
+		getWorkspaceFolder: vi.fn().mockReturnValue({ uri: { fsPath: "/test/path" } }),
+	},
+	window: {
+		activeTextEditor: undefined,
+	},
+	EventEmitter: vi.fn().mockImplementation(() => ({
+		event: vi.fn(),
+		fire: vi.fn(),
+		dispose: vi.fn(),
+	})),
+}))
+
 vi.mock("fs/promises", () => {
 	const mockReadFile = vi.fn()
 	const mockMkdir = vi.fn().mockResolvedValue(undefined)
@@ -22,7 +40,7 @@ vi.mock("../../../utils/fs", () => ({
 }))
 
 import { SYSTEM_PROMPT } from "../system"
-import { defaultModeSlug, modes } from "../../../shared/modes"
+import { defaultModeSlug, modes, getModeBySlug } from "../../../shared/modes"
 import * as vscode from "vscode"
 import * as fs from "fs/promises"
 import { toPosix } from "./utils"
@@ -130,7 +148,8 @@ describe("File-Based Custom System Prompt", () => {
 		)
 
 		// Should contain role definition and file-based system prompt
-		expect(prompt).toContain(modes[0].roleDefinition)
+		const expectedMode = getModeBySlug(defaultModeSlug) || modes[0]
+		expect(prompt).toContain(expectedMode.roleDefinition)
 		expect(prompt).toContain(fileCustomSystemPrompt)
 
 		// Should not contain any of the default sections

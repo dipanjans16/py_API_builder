@@ -20,6 +20,18 @@ export type TelemetrySetting = z.infer<typeof telemetrySettingsSchema>
 export enum TelemetryEventName {
 	// kilocode_change start
 	COMMIT_MSG_GENERATED = "Commit Message Generated",
+	INLINE_ASSIST_QUICK_TASK = "Inline Assist Quick Task",
+	INLINE_ASSIST_AUTO_TASK = "Inline Assist Auto Task",
+	INLINE_ASSIST_ACCEPT_SUGGESTION = "Inline Assist Accept Suggestion",
+	INLINE_ASSIST_REJECT_SUGGESTION = "Inline Assist Reject Suggestion",
+	CHECKPOINT_FAILURE = "Checkpoint Failure",
+	EXCESSIVE_RECURSION = "Excessive Recursion",
+	NOTIFICATION_CLICKED = "Notification Clicked",
+	WEBVIEW_MEMORY_USAGE = "Webview Memory Usage",
+	FREE_MODELS_LINK_CLICKED = "Free Models Link Clicked",
+	SWITCH_TO_KILO_CODE_CLICKED = "Switch To Kilo Code Clicked",
+	SUGGESTION_BUTTON_CLICKED = "Suggestion Button Clicked",
+	NO_ASSISTANT_MESSAGES = "No Assistant Messages",
 	// kilocode_change end
 
 	TASK_CREATED = "Task Created",
@@ -76,16 +88,42 @@ export enum TelemetryEventName {
  * TelemetryProperties
  */
 
-export const appPropertiesSchema = z.object({
+export const staticAppPropertiesSchema = z.object({
 	appName: z.string(),
 	appVersion: z.string(),
 	vscodeVersion: z.string(),
 	platform: z.string(),
 	editorName: z.string(),
+	wrapped: z.boolean(), // kilocode_change
+	wrapper: z.string().nullable(), // kilocode_change
+	wrapperTitle: z.string().nullable(), // kilocode_change
+	wrapperCode: z.string().nullable(), // kilocode_change
+	wrapperVersion: z.string().nullable(), // kilocode_change
+	hostname: z.string().optional(),
+})
+
+export type StaticAppProperties = z.infer<typeof staticAppPropertiesSchema>
+
+export const dynamicAppPropertiesSchema = z.object({
 	language: z.string(),
 	mode: z.string(),
+})
+
+export type DynamicAppProperties = z.infer<typeof dynamicAppPropertiesSchema>
+
+export const cloudAppPropertiesSchema = z.object({
 	cloudIsAuthenticated: z.boolean().optional(),
 })
+
+export type CloudAppProperties = z.infer<typeof cloudAppPropertiesSchema>
+
+export const appPropertiesSchema = z.object({
+	...staticAppPropertiesSchema.shape,
+	...dynamicAppPropertiesSchema.shape,
+	...cloudAppPropertiesSchema.shape,
+})
+
+export type AppProperties = z.infer<typeof appPropertiesSchema>
 
 export const taskPropertiesSchema = z.object({
 	taskId: z.string().optional(),
@@ -103,11 +141,15 @@ export const taskPropertiesSchema = z.object({
 		.optional(),
 })
 
+export type TaskProperties = z.infer<typeof taskPropertiesSchema>
+
 export const gitPropertiesSchema = z.object({
 	repositoryUrl: z.string().optional(),
 	repositoryName: z.string().optional(),
 	defaultBranch: z.string().optional(),
 })
+
+export type GitProperties = z.infer<typeof gitPropertiesSchema>
 
 export const telemetryPropertiesSchema = z.object({
 	...appPropertiesSchema.shape,
@@ -116,7 +158,6 @@ export const telemetryPropertiesSchema = z.object({
 })
 
 export type TelemetryProperties = z.infer<typeof telemetryPropertiesSchema>
-export type GitProperties = z.infer<typeof gitPropertiesSchema>
 
 /**
  * TelemetryEvent
@@ -136,8 +177,14 @@ export const rooCodeTelemetryEventSchema = z.discriminatedUnion("type", [
 	z.object({
 		type: z.enum([
 			// kilocode_change start
-			TelemetryEventName.COMMIT_MSG_GENERATED,
+			TelemetryEventName.COMMIT_MSG_GENERATED, // kilocode_change
+			TelemetryEventName.INLINE_ASSIST_QUICK_TASK, // kilocode_change
+			TelemetryEventName.INLINE_ASSIST_AUTO_TASK, // kilocode_change
+			TelemetryEventName.INLINE_ASSIST_ACCEPT_SUGGESTION, // kilocode_change
+			TelemetryEventName.INLINE_ASSIST_REJECT_SUGGESTION, // kilocode_change
+			TelemetryEventName.WEBVIEW_MEMORY_USAGE, // kilocode_change
 			// kilocode_change end
+
 			TelemetryEventName.TASK_CREATED,
 			TelemetryEventName.TASK_RESTARTED,
 			TelemetryEventName.TASK_COMPLETED,

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { kiloCodeMetaDataSchema } from "./kilocode.js"
 
 /**
  * ClineAsk
@@ -38,14 +39,74 @@ export const clineAsks = [
 	"browser_action_launch",
 	"use_mcp_server",
 	"auto_approval_max_req_reached",
-	"payment_required_prompt", // kilocode_change: Added for the low credits dialog
-	"report_bug", // kilocode_change
-	"condense", // kilocode_change
+	// kilocode_change start
+	"payment_required_prompt", // Added for the low credits dialog
+	"invalid_model",
+	"report_bug",
+	"condense",
+	// kilocode_change end
 ] as const
 
 export const clineAskSchema = z.enum(clineAsks)
 
 export type ClineAsk = z.infer<typeof clineAskSchema>
+
+// Needs classification:
+// - `followup`
+// - `command_output
+
+/**
+ * IdleAsk
+ *
+ * Asks that put the task into an "idle" state.
+ */
+
+export const idleAsks = [
+	"completion_result",
+	"api_req_failed",
+	"resume_completed_task",
+	"mistake_limit_reached",
+	"auto_approval_max_req_reached",
+] as const satisfies readonly ClineAsk[]
+
+export type IdleAsk = (typeof idleAsks)[number]
+
+export function isIdleAsk(ask: ClineAsk): ask is IdleAsk {
+	return (idleAsks as readonly ClineAsk[]).includes(ask)
+}
+
+/**
+ * ResumableAsk
+ *
+ * Asks that put the task into an "resumable" state.
+ */
+
+export const resumableAsks = ["resume_task"] as const satisfies readonly ClineAsk[]
+
+export type ResumableAsk = (typeof resumableAsks)[number]
+
+export function isResumableAsk(ask: ClineAsk): ask is ResumableAsk {
+	return (resumableAsks as readonly ClineAsk[]).includes(ask)
+}
+
+/**
+ * InteractiveAsk
+ *
+ * Asks that put the task into an "user interaction required" state.
+ */
+
+export const interactiveAsks = [
+	"command",
+	"tool",
+	"browser_action_launch",
+	"use_mcp_server",
+] as const satisfies readonly ClineAsk[]
+
+export type InteractiveAsk = (typeof interactiveAsks)[number]
+
+export function isInteractiveAsk(ask: ClineAsk): ask is InteractiveAsk {
+	return (interactiveAsks as readonly ClineAsk[]).includes(ask)
+}
 
 /**
  * ClineSay
@@ -92,6 +153,7 @@ export const clineSays = [
 	"api_req_retry_delayed",
 	"api_req_deleted",
 	"text",
+	"image",
 	"reasoning",
 	"completion_result",
 	"user_feedback",
@@ -159,6 +221,19 @@ export const clineMessageSchema = z.object({
 	contextCondense: contextCondenseSchema.optional(),
 	isProtected: z.boolean().optional(),
 	apiProtocol: z.union([z.literal("openai"), z.literal("anthropic")]).optional(),
+	isAnswered: z.boolean().optional(),
+	metadata: z
+		.object({
+			gpt5: z
+				.object({
+					previous_response_id: z.string().optional(),
+					instructions: z.string().optional(),
+					reasoning_summary: z.string().optional(),
+				})
+				.optional(),
+			kiloCode: kiloCodeMetaDataSchema.optional(),
+		})
+		.optional(),
 })
 
 export type ClineMessage = z.infer<typeof clineMessageSchema>
@@ -177,3 +252,16 @@ export const tokenUsageSchema = z.object({
 })
 
 export type TokenUsage = z.infer<typeof tokenUsageSchema>
+
+/**
+ * QueuedMessage
+ */
+
+export const queuedMessageSchema = z.object({
+	timestamp: z.number(),
+	id: z.string(),
+	text: z.string(),
+	images: z.array(z.string()).optional(),
+})
+
+export type QueuedMessage = z.infer<typeof queuedMessageSchema>

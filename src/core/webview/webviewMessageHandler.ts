@@ -5,27 +5,36 @@ import * as fs from "fs/promises"
 import pWaitFor from "p-wait-for"
 import * as vscode from "vscode"
 import axios from "axios" // kilocode_change
-import * as yaml from "yaml"
+import { getKiloBaseUriFromToken } from "../../shared/kilocode/token" // kilocode_change
+import { ProfileData, SeeNewChangesPayload } from "../../shared/WebviewMessage" // kilocode_change
 
 import {
 	type Language,
-	type ProviderSettings,
 	type GlobalState,
 	type ClineMessage,
+	type TelemetrySetting,
 	TelemetryEventName,
 	ghostServiceSettingsSchema, // kilocode_change
 } from "@roo-code/types"
 import { CloudService } from "@roo-code/cloud"
 import { TelemetryService } from "@roo-code/telemetry"
+
 import { type ApiMessage } from "../task-persistence/apiMessages"
+import { saveTaskMessages } from "../task-persistence"
 
 import { ClineProvider } from "./ClineProvider"
+import { handleCheckpointRestoreOperation } from "./checkpointRestoreHandler"
 import { changeLanguage, t } from "../../i18n"
 import { Package } from "../../shared/package"
 import { RouterName, toRouterName, ModelRecord } from "../../shared/api"
-import { supportPrompt } from "../../shared/support-prompt"
+import { MessageEnhancer } from "./messageEnhancer"
 
-import { checkoutDiffPayloadSchema, checkoutRestorePayloadSchema, WebviewMessage } from "../../shared/WebviewMessage"
+import {
+	type WebviewMessage,
+	type EditQueuedMessagePayload,
+	checkoutDiffPayloadSchema,
+	checkoutRestorePayloadSchema,
+} from "../../shared/WebviewMessage"
 import { checkExistKey } from "../../shared/checkExistApiConfig"
 import { experimentDefault } from "../../shared/experiments"
 import { Terminal } from "../../integrations/terminal/Terminal"
@@ -38,15 +47,13 @@ import { searchWorkspaceFiles } from "../../services/search/file-search"
 import { fileExistsAtPath } from "../../utils/fs"
 import { playTts, setTtsEnabled, setTtsSpeed, stopTts } from "../../utils/tts"
 import { showSystemNotification } from "../../integrations/notifications" // kilocode_change
-import { singleCompletionHandler } from "../../utils/single-completion-handler"
+import { singleCompletionHandler } from "../../utils/single-completion-handler" // kilocode_change
 import { searchCommits } from "../../utils/git"
 import { exportSettings, importSettingsWithFeedback } from "../config/importExport"
 import { getOpenAiModels } from "../../api/providers/openai"
 import { getVsCodeLmModels } from "../../api/providers/vscode-lm"
 import { openMention } from "../mentions"
-import { TelemetrySetting } from "../../shared/TelemetrySetting"
 import { getWorkspacePath } from "../../utils/path"
-import { ensureSettingsDirectoryExists } from "../../utils/globalContext"
 import { Mode, defaultModeSlug } from "../../shared/modes"
 import { getModels, flushModels } from "../../api/providers/fetchers/modelCache"
 import { GetModelsOptions } from "../../shared/api"
@@ -54,12 +61,14 @@ import { generateSystemPrompt } from "./generateSystemPrompt"
 import { getCommand } from "../../utils/commands"
 import { toggleWorkflow, toggleRule, createRuleFile, deleteRuleFile } from "./kilorules"
 import { mermaidFixPrompt } from "../prompts/utilities/mermaid" // kilocode_change
-import { editMessageHandler } from "../kilocode/webview/webviewMessageHandlerUtils" // kilocode_change
+import { editMessageHandler, fetchKilocodeNotificationsHandler } from "../kilocode/webview/webviewMessageHandlerUtils" // kilocode_change
 
 const ALLOWED_VSCODE_SETTINGS = new Set(["terminal.integrated.inheritEnv"])
 
 import { MarketplaceManager, MarketplaceItemType } from "../../services/marketplace"
 import { setPendingTodoList } from "../tools/updateTodoListTool"
+import { UsageTracker } from "../../utils/usage-tracker"
+import { seeNewChanges } from "../checkpoints/kilocode/seeNewChanges" // kilocode_change
 
 export const webviewMessageHandler = async (
 	provider: ClineProvider,
@@ -71,14 +80,17 @@ export const webviewMessageHandler = async (
 	const updateGlobalState = async <K extends keyof GlobalState>(key: K, value: GlobalState[K]) =>
 		await provider.contextProxy.setValue(key, value)
 
+	const getCurrentCwd = () => {
+		return provider.getCurrentTask()?.cwd || provider.cwd
+	}
 	/**
 	 * Shared utility to find message indices based on timestamp
 	 */
 	const findMessageIndices = (messageTs: number, currentCline: any) => {
-		const timeCutoff = messageTs - 1000 // 1 second buffer before the message
-		const messageIndex = currentCline.clineMessages.findIndex((msg: ClineMessage) => msg.ts && msg.ts >= timeCutoff)
+		// Find the exact message by timestamp, not the first one after a cutoff
+		const messageIndex = currentCline.clineMessages.findIndex((msg: ClineMessage) => msg.ts === messageTs)
 		const apiConversationHistoryIndex = currentCline.apiConversationHistory.findIndex(
-			(msg: ApiMessage) => msg.ts && msg.ts >= timeCutoff,
+			(msg: ApiMessage) => msg.ts === messageTs,
 		)
 		return { messageIndex, apiConversationHistoryIndex }
 	}
@@ -105,38 +117,110 @@ export const webviewMessageHandler = async (
 	 * Handles message deletion operations with user confirmation
 	 */
 	const handleDeleteOperation = async (messageTs: number): Promise<void> => {
+		// Check if there's a checkpoint before this message
+		const currentCline = provider.getCurrentTask()
+		let hasCheckpoint = false
+		if (currentCline) {
+			const { messageIndex } = findMessageIndices(messageTs, currentCline)
+			if (messageIndex !== -1) {
+				// Find the last checkpoint before this message
+				const checkpoints = currentCline.clineMessages.filter(
+					(msg) => msg.say === "checkpoint_saved" && msg.ts > messageTs,
+				)
+
+				hasCheckpoint = checkpoints.length > 0
+			} else {
+				console.log("[webviewMessageHandler] Message not found! Looking for ts:", messageTs)
+			}
+		}
+
 		// Send message to webview to show delete confirmation dialog
 		await provider.postMessageToWebview({
 			type: "showDeleteMessageDialog",
 			messageTs,
+			hasCheckpoint,
 		})
 	}
 
 	/**
 	 * Handles confirmed message deletion from webview dialog
 	 */
-	const handleDeleteMessageConfirm = async (messageTs: number): Promise<void> => {
-		// Only proceed if we have a current cline
-		if (provider.getCurrentCline()) {
-			const currentCline = provider.getCurrentCline()!
-			const { messageIndex, apiConversationHistoryIndex } = findMessageIndices(messageTs, currentCline)
+	const handleDeleteMessageConfirm = async (messageTs: number, restoreCheckpoint?: boolean): Promise<void> => {
+		const currentCline = provider.getCurrentTask()
+		if (!currentCline) {
+			console.error("[handleDeleteMessageConfirm] No current cline available")
+			return
+		}
 
-			if (messageIndex !== -1) {
-				try {
-					const { historyItem } = await provider.getTaskWithId(currentCline.taskId)
+		const { messageIndex, apiConversationHistoryIndex } = findMessageIndices(messageTs, currentCline)
 
-					// Delete this message and all subsequent messages
-					await removeMessagesThisAndSubsequent(currentCline, messageIndex, apiConversationHistoryIndex)
+		if (messageIndex === -1) {
+			const errorMessage = `Message with timestamp ${messageTs} not found`
+			console.error("[handleDeleteMessageConfirm]", errorMessage)
+			await vscode.window.showErrorMessage(errorMessage)
+			return
+		}
 
-					// Initialize with history item after deletion
-					await provider.initClineWithHistoryItem(historyItem)
-				} catch (error) {
-					console.error("Error in delete message:", error)
-					vscode.window.showErrorMessage(
-						`Error deleting message: ${error instanceof Error ? error.message : String(error)}`,
-					)
+		try {
+			const targetMessage = currentCline.clineMessages[messageIndex]
+
+			// If checkpoint restoration is requested, find and restore to the last checkpoint before this message
+			if (restoreCheckpoint) {
+				// Find the last checkpoint before this message
+				const checkpoints = currentCline.clineMessages.filter(
+					(msg) => msg.say === "checkpoint_saved" && msg.ts > messageTs,
+				)
+
+				const nextCheckpoint = checkpoints[0]
+
+				if (nextCheckpoint && nextCheckpoint.text) {
+					await handleCheckpointRestoreOperation({
+						provider,
+						currentCline,
+						messageTs: targetMessage.ts!,
+						messageIndex,
+						checkpoint: { hash: nextCheckpoint.text },
+						operation: "delete",
+					})
+				} else {
+					// No checkpoint found before this message
+					console.log("[handleDeleteMessageConfirm] No checkpoint found before message")
+					vscode.window.showWarningMessage("No checkpoint found before this message")
 				}
+			} else {
+				// For non-checkpoint deletes, preserve checkpoint associations for remaining messages
+				// Store checkpoints from messages that will be preserved
+				const preservedCheckpoints = new Map<number, any>()
+				for (let i = 0; i < messageIndex; i++) {
+					const msg = currentCline.clineMessages[i]
+					if (msg?.checkpoint && msg.ts) {
+						preservedCheckpoints.set(msg.ts, msg.checkpoint)
+					}
+				}
+
+				// Delete this message and all subsequent messages
+				await removeMessagesThisAndSubsequent(currentCline, messageIndex, apiConversationHistoryIndex)
+
+				// Restore checkpoint associations for preserved messages
+				for (const [ts, checkpoint] of preservedCheckpoints) {
+					const msgIndex = currentCline.clineMessages.findIndex((msg) => msg.ts === ts)
+					if (msgIndex !== -1) {
+						currentCline.clineMessages[msgIndex].checkpoint = checkpoint
+					}
+				}
+
+				// Save the updated messages with restored checkpoints
+				await saveTaskMessages({
+					messages: currentCline.clineMessages,
+					taskId: currentCline.taskId,
+					globalStoragePath: provider.contextProxy.globalStorageUri.fsPath,
+				})
 			}
+		} catch (error) {
+			console.error("Error in delete message:", error)
+			vscode.window.showErrorMessage(
+				`Error deleting message: ${error instanceof Error ? error.message : String(error)}`,
+			)
 		}
 	}
 
@@ -144,11 +228,31 @@ export const webviewMessageHandler = async (
 	 * Handles message editing operations with user confirmation
 	 */
 	const handleEditOperation = async (messageTs: number, editedContent: string, images?: string[]): Promise<void> => {
+		// Check if there's a checkpoint before this message
+		const currentCline = provider.getCurrentTask()
+		let hasCheckpoint = false
+		if (currentCline) {
+			const { messageIndex } = findMessageIndices(messageTs, currentCline)
+			if (messageIndex !== -1) {
+				// Find the last checkpoint before this message
+				const checkpoints = currentCline.clineMessages.filter(
+					(msg) => msg.say === "checkpoint_saved" && msg.ts > messageTs,
+				)
+
+				hasCheckpoint = checkpoints.length > 0
+			} else {
+				console.log("[webviewMessageHandler] Edit - Message not found in clineMessages!")
+			}
+		} else {
+			console.log("[webviewMessageHandler] Edit - No currentCline available!")
+		}
+
 		// Send message to webview to show edit confirmation dialog
 		await provider.postMessageToWebview({
 			type: "showEditMessageDialog",
 			messageTs,
 			text: editedContent,
+			hasCheckpoint,
 			images,
 		})
 	}
@@ -159,38 +263,105 @@ export const webviewMessageHandler = async (
 	const handleEditMessageConfirm = async (
 		messageTs: number,
 		editedContent: string,
+		restoreCheckpoint?: boolean,
 		images?: string[],
 	): Promise<void> => {
-		// Only proceed if we have a current cline
-		if (provider.getCurrentCline()) {
-			const currentCline = provider.getCurrentCline()!
+		const currentCline = provider.getCurrentTask()
+		if (!currentCline) {
+			console.error("[handleEditMessageConfirm] No current cline available")
+			return
+		}
 
-			// Use findMessageIndices to find messages based on timestamp
-			const { messageIndex, apiConversationHistoryIndex } = findMessageIndices(messageTs, currentCline)
+		// Use findMessageIndices to find messages based on timestamp
+		const { messageIndex, apiConversationHistoryIndex } = findMessageIndices(messageTs, currentCline)
 
-			if (messageIndex !== -1) {
-				try {
-					// Edit this message and delete subsequent
-					await removeMessagesThisAndSubsequent(currentCline, messageIndex, apiConversationHistoryIndex)
+		if (messageIndex === -1) {
+			const errorMessage = `Message with timestamp ${messageTs} not found`
+			console.error("[handleEditMessageConfirm]", errorMessage)
+			await vscode.window.showErrorMessage(errorMessage)
+			return
+		}
 
-					// Process the edited message as a regular user message
-					// This will add it to the conversation and trigger an AI response
-					webviewMessageHandler(provider, {
-						type: "askResponse",
-						askResponse: "messageResponse",
-						text: editedContent,
-						images,
+		try {
+			const targetMessage = currentCline.clineMessages[messageIndex]
+
+			// If checkpoint restoration is requested, find and restore to the last checkpoint before this message
+			if (restoreCheckpoint) {
+				// Find the last checkpoint before this message
+				const checkpoints = currentCline.clineMessages.filter(
+					(msg) => msg.say === "checkpoint_saved" && msg.ts > messageTs,
+				)
+
+				const nextCheckpoint = checkpoints[0]
+
+				if (nextCheckpoint && nextCheckpoint.text) {
+					await handleCheckpointRestoreOperation({
+						provider,
+						currentCline,
+						messageTs: targetMessage.ts!,
+						messageIndex,
+						checkpoint: { hash: nextCheckpoint.text },
+						operation: "edit",
+						editData: {
+							editedContent,
+							images,
+							apiConversationHistoryIndex,
+						},
 					})
-
-					// Don't initialize with history item for edit operations
-					// The webviewMessageHandler will handle the conversation state
-				} catch (error) {
-					console.error("Error in edit message:", error)
-					vscode.window.showErrorMessage(
-						`Error editing message: ${error instanceof Error ? error.message : String(error)}`,
-					)
+					// The task will be cancelled and reinitialized by checkpointRestore
+					// The pending edit will be processed in the reinitialized task
+					return
+				} else {
+					// No checkpoint found before this message
+					console.log("[handleEditMessageConfirm] No checkpoint found before message")
+					vscode.window.showWarningMessage("No checkpoint found before this message")
+					// Continue with non-checkpoint edit
 				}
 			}
+
+			// For non-checkpoint edits, preserve checkpoint associations for remaining messages
+			// Store checkpoints from messages that will be preserved
+			const preservedCheckpoints = new Map<number, any>()
+			for (let i = 0; i < messageIndex; i++) {
+				const msg = currentCline.clineMessages[i]
+				if (msg?.checkpoint && msg.ts) {
+					preservedCheckpoints.set(msg.ts, msg.checkpoint)
+				}
+			}
+
+			// Edit this message and delete subsequent
+			await removeMessagesThisAndSubsequent(currentCline, messageIndex, apiConversationHistoryIndex)
+
+			// Restore checkpoint associations for preserved messages
+			for (const [ts, checkpoint] of preservedCheckpoints) {
+				const msgIndex = currentCline.clineMessages.findIndex((msg) => msg.ts === ts)
+				if (msgIndex !== -1) {
+					currentCline.clineMessages[msgIndex].checkpoint = checkpoint
+				}
+			}
+
+			// Save the updated messages with restored checkpoints
+			await saveTaskMessages({
+				messages: currentCline.clineMessages,
+				taskId: currentCline.taskId,
+				globalStoragePath: provider.contextProxy.globalStorageUri.fsPath,
+			})
+
+			// Process the edited message as a regular user message
+			webviewMessageHandler(provider, {
+				type: "askResponse",
+				askResponse: "messageResponse",
+				text: editedContent,
+				images,
+			})
+
+			// Don't initialize with history item for edit operations
+			// The webviewMessageHandler will handle the conversation state
+		} catch (error) {
+			console.error("Error in edit message:", error)
+			vscode.window.showErrorMessage(
+				`Error editing message: ${error instanceof Error ? error.message : String(error)}`,
+			)
 		}
 	}
 
@@ -299,11 +470,28 @@ export const webviewMessageHandler = async (
 			// Initializing new instance of Cline will make sure that any
 			// agentically running promises in old instance don't affect our new
 			// task. This essentially creates a fresh slate for the new task.
-			await provider.initClineWithTask(message.text, message.images)
+			try {
+				await provider.createTask(message.text, message.images)
+				// Task created successfully - notify the UI to reset
+				await provider.postMessageToWebview({
+					type: "invoke",
+					invoke: "newChat",
+				})
+			} catch (error) {
+				// For all errors, reset the UI and show error
+				await provider.postMessageToWebview({
+					type: "invoke",
+					invoke: "newChat",
+				})
+				// Show error to user
+				vscode.window.showErrorMessage(
+					`Failed to create task: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
 			break
 		// kilocode_change start
 		case "condense":
-			provider.getCurrentCline()?.handleWebviewAskResponse("yesButtonClicked")
+			provider.getCurrentTask()?.handleWebviewAskResponse("yesButtonClicked")
 			break
 		// kilocode_change end
 		case "customInstructions":
@@ -349,6 +537,10 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("allowedMaxRequests", message.value)
 			await provider.postStateToWebview()
 			break
+		case "allowedMaxCost":
+			await updateGlobalState("allowedMaxCost", message.value)
+			await provider.postStateToWebview()
+			break
 		case "alwaysAllowSubtasks":
 			await updateGlobalState("alwaysAllowSubtasks", message.bool)
 			await provider.postStateToWebview()
@@ -358,7 +550,7 @@ export const webviewMessageHandler = async (
 			await provider.postStateToWebview()
 			break
 		case "askResponse":
-			provider.getCurrentCline()?.handleWebviewAskResponse(message.askResponse!, message.text, message.images)
+			provider.getCurrentTask()?.handleWebviewAskResponse(message.askResponse!, message.text, message.images)
 			break
 		case "autoCondenseContext":
 			await updateGlobalState("autoCondenseContext", message.bool)
@@ -370,19 +562,23 @@ export const webviewMessageHandler = async (
 			break
 		case "terminalOperation":
 			if (message.terminalOperation) {
-				provider.getCurrentCline()?.handleTerminalOperation(message.terminalOperation)
+				provider.getCurrentTask()?.handleTerminalOperation(message.terminalOperation)
 			}
 			break
 		case "clearTask":
-			// clear task resets the current session and allows for a new task to be started, if this session is a subtask - it allows the parent task to be resumed
-			// Check if the current task actually has a parent task
-			const currentTask = provider.getCurrentCline()
+			// Clear task resets the current session and allows for a new task
+			// to be started, if this session is a subtask - it allows the
+			// parent task to be resumed.
+			// Check if the current task actually has a parent task.
+			const currentTask = provider.getCurrentTask()
+
 			if (currentTask && currentTask.parentTask) {
 				await provider.finishSubTask(t("common:tasks.canceled"))
 			} else {
 				// Regular task - just clear it
 				await provider.clearTask()
 			}
+
 			await provider.postStateToWebview()
 			break
 		case "didShowAnnouncement":
@@ -399,14 +595,15 @@ export const webviewMessageHandler = async (
 			})
 			break
 		case "exportCurrentTask":
-			const currentTaskId = provider.getCurrentCline()?.taskId
+			const currentTaskId = provider.getCurrentTask()?.taskId
 			if (currentTaskId) {
 				provider.exportTaskWithId(currentTaskId)
 			}
 			break
 		case "shareCurrentTask":
-			const shareTaskId = provider.getCurrentCline()?.taskId
-			const clineMessages = provider.getCurrentCline()?.clineMessages
+			const shareTaskId = provider.getCurrentTask()?.taskId
+			const clineMessages = provider.getCurrentTask()?.clineMessages
+
 			if (!shareTaskId) {
 				vscode.window.showErrorMessage(t("common:errors.share_no_active_task"))
 				break
@@ -414,7 +611,7 @@ export const webviewMessageHandler = async (
 
 			try {
 				const visibility = message.visibility || "organization"
-				const result = await CloudService.instance.shareTask(shareTaskId, visibility, clineMessages)
+				const result = await CloudService.instance.shareTask(shareTaskId, visibility)
 
 				if (result.success && result.shareUrl) {
 					// Show success notification
@@ -540,6 +737,7 @@ export const webviewMessageHandler = async (
 				"kilocode-openrouter": {}, // kilocode_change
 				ollama: {},
 				lmstudio: {},
+				deepinfra: {},
 			}
 
 			const safeGetModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
@@ -563,15 +761,45 @@ export const webviewMessageHandler = async (
 					key: "openrouter",
 					options: { provider: "openrouter", apiKey: openRouterApiKey, baseUrl: openRouterBaseUrl },
 				},
-				{ key: "requesty", options: { provider: "requesty", apiKey: apiConfiguration.requestyApiKey } },
+				{
+					key: "requesty",
+					options: {
+						provider: "requesty",
+						apiKey: apiConfiguration.requestyApiKey,
+						baseUrl: apiConfiguration.requestyBaseUrl,
+					},
+				},
 				{ key: "glama", options: { provider: "glama" } },
 				{ key: "unbound", options: { provider: "unbound", apiKey: apiConfiguration.unboundApiKey } },
 				{
 					key: "kilocode-openrouter",
-					options: { provider: "kilocode-openrouter", kilocodeToken: apiConfiguration.kilocodeToken },
+					options: {
+						provider: "kilocode-openrouter",
+						kilocodeToken: apiConfiguration.kilocodeToken,
+						kilocodeOrganizationId: apiConfiguration.kilocodeOrganizationId,
+					},
+				},
+				{ key: "ollama", options: { provider: "ollama", baseUrl: apiConfiguration.ollamaBaseUrl } },
+				{ key: "vercel-ai-gateway", options: { provider: "vercel-ai-gateway" } },
+				{
+					key: "deepinfra",
+					options: {
+						provider: "deepinfra",
+						apiKey: apiConfiguration.deepInfraApiKey,
+						baseUrl: apiConfiguration.deepInfraBaseUrl,
+					},
 				},
 			]
 			// kilocode_change end
+
+			// Add IO Intelligence if API key is provided
+			const ioIntelligenceApiKey = apiConfiguration.ioIntelligenceApiKey
+			if (ioIntelligenceApiKey) {
+				modelFetchPromises.push({
+					key: "io-intelligence",
+					options: { provider: "io-intelligence", apiKey: ioIntelligenceApiKey },
+				})
+			}
 
 			// Don't fetch Ollama and LM Studio models by default anymore
 			// They have their own specific handlers: requestOllamaModels and requestLmStudioModels
@@ -614,7 +842,7 @@ export const webviewMessageHandler = async (
 					} else if (routerName === "lmstudio" && Object.keys(result.value.models).length > 0) {
 						provider.postMessageToWebview({
 							type: "lmStudioModels",
-							lmStudioModels: Object.keys(result.value.models),
+							lmStudioModels: result.value.models,
 						})
 					}
 				} else {
@@ -678,7 +906,7 @@ export const webviewMessageHandler = async (
 				if (Object.keys(lmStudioModels).length > 0) {
 					provider.postMessageToWebview({
 						type: "lmStudioModels",
-						lmStudioModels: Object.keys(lmStudioModels),
+						lmStudioModels: lmStudioModels,
 					})
 				}
 			} catch (error) {
@@ -704,6 +932,22 @@ export const webviewMessageHandler = async (
 			// TODO: Cache like we do for OpenRouter, etc?
 			provider.postMessageToWebview({ type: "vsCodeLmModels", vsCodeLmModels })
 			break
+		case "requestHuggingFaceModels":
+			try {
+				const { getHuggingFaceModelsWithMetadata } = await import("../../api/providers/fetchers/huggingface")
+				const huggingFaceModelsResponse = await getHuggingFaceModelsWithMetadata()
+				provider.postMessageToWebview({
+					type: "huggingFaceModels",
+					huggingFaceModels: huggingFaceModelsResponse.models,
+				})
+			} catch (error) {
+				console.error("Failed to fetch Hugging Face models:", error)
+				provider.postMessageToWebview({
+					type: "huggingFaceModels",
+					huggingFaceModels: [],
+				})
+			}
+			break
 		case "openImage":
 			openImage(message.text!, { values: message.values })
 			break
@@ -711,10 +955,14 @@ export const webviewMessageHandler = async (
 			saveImage(message.dataUri!)
 			break
 		case "openFile":
-			openFile(message.text!, message.values as { create?: boolean; content?: string; line?: number })
+			let filePath: string = message.text!
+			if (!path.isAbsolute(filePath)) {
+				filePath = path.join(getCurrentCwd(), filePath)
+			}
+			openFile(filePath, message.values as { create?: boolean; content?: string; line?: number })
 			break
 		case "openMention":
-			openMention(message.text)
+			openMention(getCurrentCwd(), message.text)
 			break
 		case "openExternal":
 			if (message.url) {
@@ -725,10 +973,18 @@ export const webviewMessageHandler = async (
 			const result = checkoutDiffPayloadSchema.safeParse(message.payload)
 
 			if (result.success) {
-				await provider.getCurrentCline()?.checkpointDiff(result.data)
+				await provider.getCurrentTask()?.checkpointDiff(result.data)
 			}
 
 			break
+		// kilocode_change start
+		case "seeNewChanges":
+			const task = provider.getCurrentTask()
+			if (task && message.payload && message.payload) {
+				await seeNewChanges(task, (message.payload as SeeNewChangesPayload).commitRange)
+			}
+			break
+		// kilocode_change end
 		case "checkpointRestore": {
 			const result = checkoutRestorePayloadSchema.safeParse(message.payload)
 
@@ -736,13 +992,13 @@ export const webviewMessageHandler = async (
 				await provider.cancelTask()
 
 				try {
-					await pWaitFor(() => provider.getCurrentCline()?.isInitialized === true, { timeout: 3_000 })
+					await pWaitFor(() => provider.getCurrentTask()?.isInitialized === true, { timeout: 3_000 })
 				} catch (error) {
 					vscode.window.showErrorMessage(t("common:errors.checkpoint_timeout"))
 				}
 
 				try {
-					await provider.getCurrentCline()?.checkpointRestore(result.data)
+					await provider.getCurrentTask()?.checkpointRestore(result.data)
 				} catch (error) {
 					vscode.window.showErrorMessage(t("common:errors.checkpoint_failed"))
 				}
@@ -809,8 +1065,8 @@ export const webviewMessageHandler = async (
 				return
 			}
 
-			const workspaceFolder = vscode.workspace.workspaceFolders[0]
-			const rooDir = path.join(workspaceFolder.uri.fsPath, ".kilocode")
+			const workspaceFolder = getCurrentCwd()
+			const rooDir = path.join(workspaceFolder, ".kilocode")
 			const mcpPath = path.join(rooDir, "mcp.json")
 
 			try {
@@ -910,6 +1166,13 @@ export const webviewMessageHandler = async (
 		case "mcpEnabled":
 			const mcpEnabled = message.bool ?? true
 			await updateGlobalState("mcpEnabled", mcpEnabled)
+
+			const mcpHubInstance = provider.getMcpHub()
+
+			if (mcpHubInstance) {
+				await mcpHubInstance.handleMcpEnabledChange(mcpEnabled)
+			}
+
 			await provider.postStateToWebview()
 			break
 		case "enableMcpServerCreation":
@@ -922,7 +1185,7 @@ export const webviewMessageHandler = async (
 			break
 		case "showSystemNotification":
 			const isSystemNotificationsEnabled = getGlobalState("systemNotificationsEnabled") ?? true
-			if (!isSystemNotificationsEnabled) {
+			if (!isSystemNotificationsEnabled && !message.alwaysAllow) {
 				break
 			}
 			if (message.notificationOptions) {
@@ -940,14 +1203,34 @@ export const webviewMessageHandler = async (
 			}
 			break
 		// kilocode_change end
+		case "remoteControlEnabled":
+			try {
+				await CloudService.instance.updateUserSettings({ extensionBridgeEnabled: message.bool ?? false })
+			} catch (error) {
+				provider.log(
+					`CloudService#updateUserSettings failed: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+
+			try {
+				await provider.remoteControlEnabled(message.bool ?? false)
+			} catch (error) {
+				provider.log(
+					`ClineProvider#remoteControlEnabled failed: ${error instanceof Error ? error.message : String(error)}`,
+				)
+			}
+
+			await provider.postStateToWebview()
+			break
 		case "refreshAllMcpServers": {
 			const mcpHub = provider.getMcpHub()
+
 			if (mcpHub) {
 				await mcpHub.refreshAllConnections()
 			}
+
 			break
 		}
-		// playSound handler removed - now handled directly in the webview
 		case "soundEnabled":
 			const soundEnabled = message.bool ?? true
 			await updateGlobalState("soundEnabled", soundEnabled)
@@ -961,7 +1244,7 @@ export const webviewMessageHandler = async (
 		case "ttsEnabled":
 			const ttsEnabled = message.bool ?? true
 			await updateGlobalState("ttsEnabled", ttsEnabled)
-			setTtsEnabled(ttsEnabled) // Add this line to update the tts utility
+			setTtsEnabled(ttsEnabled)
 			await provider.postStateToWebview()
 			break
 		case "ttsSpeed":
@@ -977,6 +1260,7 @@ export const webviewMessageHandler = async (
 					onStop: () => provider.postMessageToWebview({ type: "ttsStop", text: message.text }),
 				})
 			}
+
 			break
 		case "stopTts":
 			stopTts()
@@ -1050,6 +1334,12 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("fuzzyMatchThreshold", message.value)
 			await provider.postStateToWebview()
 			break
+		// kilocode_change start
+		case "morphApiKey":
+			await updateGlobalState("morphApiKey", message.text)
+			await provider.postStateToWebview()
+			break
+		// kilocode_change end
 		case "updateVSCodeSetting": {
 			const { setting, value } = message
 
@@ -1098,9 +1388,34 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("writeDelayMs", message.value)
 			await provider.postStateToWebview()
 			break
-		case "terminalOutputLineLimit":
-			await updateGlobalState("terminalOutputLineLimit", message.value)
+		case "diagnosticsEnabled":
+			await updateGlobalState("diagnosticsEnabled", message.bool ?? true)
 			await provider.postStateToWebview()
+			break
+		case "terminalOutputLineLimit":
+			// Validate that the line limit is a positive number
+			const lineLimit = message.value
+			if (typeof lineLimit === "number" && lineLimit > 0) {
+				await updateGlobalState("terminalOutputLineLimit", lineLimit)
+				await provider.postStateToWebview()
+			} else {
+				vscode.window.showErrorMessage(
+					t("common:errors.invalid_line_limit") || "Terminal output line limit must be a positive number",
+				)
+			}
+			break
+		case "terminalOutputCharacterLimit":
+			// Validate that the character limit is a positive number
+			const charLimit = message.value
+			if (typeof charLimit === "number" && charLimit > 0) {
+				await updateGlobalState("terminalOutputCharacterLimit", charLimit)
+				await provider.postStateToWebview()
+			} else {
+				vscode.window.showErrorMessage(
+					t("common:errors.invalid_character_limit") ||
+						"Terminal output character limit must be a positive number",
+				)
+			}
 			break
 		case "terminalShellIntegrationTimeout":
 			await updateGlobalState("terminalShellIntegrationTimeout", message.value)
@@ -1214,14 +1529,14 @@ export const webviewMessageHandler = async (
 			}
 			break
 		case "deleteMessage": {
-			if (provider.getCurrentCline() && typeof message.value === "number" && message.value) {
+			if (provider.getCurrentTask() && typeof message.value === "number" && message.value) {
 				await handleMessageModificationsOperation(message.value, "delete")
 			}
 			break
 		}
 		case "submitEditedMessage": {
 			if (
-				provider.getCurrentCline() &&
+				provider.getCurrentTask() &&
 				typeof message.value === "number" &&
 				message.value &&
 				message.editedMessageContent
@@ -1266,8 +1581,16 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("language", message.text as Language)
 			await provider.postStateToWebview()
 			break
+		case "openRouterImageApiKey":
+			await provider.contextProxy.setValue("openRouterImageApiKey", message.text)
+			await provider.postStateToWebview()
+			break
+		case "openRouterImageGenerationSelectedModel":
+			await provider.contextProxy.setValue("openRouterImageGenerationSelectedModel", message.text)
+			await provider.postStateToWebview()
+			break
 		case "showRooIgnoredFiles":
-			await updateGlobalState("showRooIgnoredFiles", message.bool ?? true)
+			await updateGlobalState("showRooIgnoredFiles", message.bool ?? false)
 			await provider.postStateToWebview()
 			break
 		case "hasOpenedModeSelector":
@@ -1279,6 +1602,10 @@ export const webviewMessageHandler = async (
 			await provider.postStateToWebview()
 			break
 		// kilocode_change start
+		case "kiloCodeImageApiKey":
+			await provider.contextProxy.setValue("kiloCodeImageApiKey", message.text)
+			await provider.postStateToWebview()
+			break
 		case "showAutoApproveMenu":
 			await updateGlobalState("showAutoApproveMenu", message.bool ?? true)
 			await provider.postStateToWebview()
@@ -1292,9 +1619,27 @@ export const webviewMessageHandler = async (
 			await provider.postStateToWebview()
 			break
 		// kilocode_change end
+		case "maxImageFileSize":
+			await updateGlobalState("maxImageFileSize", message.value)
+			await provider.postStateToWebview()
+			break
+		case "maxTotalImageSize":
+			await updateGlobalState("maxTotalImageSize", message.value)
+			await provider.postStateToWebview()
+			break
 		case "maxConcurrentFileReads":
 			const valueToSave = message.value // Capture the value intended for saving
 			await updateGlobalState("maxConcurrentFileReads", valueToSave)
+			await provider.postStateToWebview()
+			break
+		case "includeDiagnosticMessages":
+			// Only apply default if the value is truly undefined (not false)
+			const includeValue = message.bool !== undefined ? message.bool : true
+			await updateGlobalState("includeDiagnosticMessages", includeValue)
+			await provider.postStateToWebview()
+			break
+		case "maxDiagnosticMessages":
+			await updateGlobalState("maxDiagnosticMessages", message.value ?? 50)
 			await provider.postStateToWebview()
 			break
 		case "setHistoryPreviewCollapsed": // Add the new case handler
@@ -1320,15 +1665,19 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("enhancementApiConfigId", message.text)
 			await provider.postStateToWebview()
 			break
-		// kilocode_change start
+		// kilocode_change start - commitMessageApiConfigId
 		case "commitMessageApiConfigId":
 			await updateGlobalState("commitMessageApiConfigId", message.text)
 			await provider.postStateToWebview()
 			break
-		case "autocompleteApiConfigId":
-			await updateGlobalState("autocompleteApiConfigId", message.text)
+		// kilocode_change end - commitMessageApiConfigId
+		// kilocode_change start - terminalCommandApiConfigId
+		case "terminalCommandApiConfigId":
+			await updateGlobalState("terminalCommandApiConfigId", message.text)
 			await provider.postStateToWebview()
 			break
+		// kilocode_change end - terminalCommandApiConfigId
+		// kilocode_change start - ghostServiceSettings
 		case "ghostServiceSettings":
 			if (!message.values) {
 				return
@@ -1340,11 +1689,20 @@ export const webviewMessageHandler = async (
 			vscode.commands.executeCommand("kilo-code.ghost.reload")
 			break
 		// kilocode_change end
+		case "includeTaskHistoryInEnhance":
+			await updateGlobalState("includeTaskHistoryInEnhance", message.bool ?? true)
+			await provider.postStateToWebview()
+			break
 		case "condensingApiConfigId":
 			await updateGlobalState("condensingApiConfigId", message.text)
 			await provider.postStateToWebview()
 			break
 		case "updateCondensingPrompt":
+			// Store the condensing prompt in customSupportPrompts["CONDENSE"] instead of customCondensingPrompt
+			const currentSupportPrompts = getGlobalState("customSupportPrompts") ?? {}
+			const updatedSupportPrompts = { ...currentSupportPrompts, CONDENSE: message.text }
+			await updateGlobalState("customSupportPrompts", updatedSupportPrompts)
+			// Also update the old field for backward compatibility during migration
 			await updateGlobalState("customCondensingPrompt", message.text)
 			await provider.postStateToWebview()
 			break
@@ -1359,32 +1717,36 @@ export const webviewMessageHandler = async (
 		case "enhancePrompt":
 			if (message.text) {
 				try {
-					const { apiConfiguration, customSupportPrompts, listApiConfigMeta, enhancementApiConfigId } =
-						await provider.getState()
+					const state = await provider.getState()
 
-					// Try to get enhancement config first, fall back to current config.
-					let configToUse: ProviderSettings = apiConfiguration
+					const {
+						apiConfiguration,
+						customSupportPrompts,
+						listApiConfigMeta = [],
+						enhancementApiConfigId,
+						includeTaskHistoryInEnhance,
+					} = state
 
-					if (enhancementApiConfigId && !!listApiConfigMeta.find(({ id }) => id === enhancementApiConfigId)) {
-						const { name: _, ...providerSettings } = await provider.providerSettingsManager.getProfile({
-							id: enhancementApiConfigId,
-						})
+					const currentCline = provider.getCurrentTask()
 
-						if (providerSettings.apiProvider) {
-							configToUse = providerSettings
-						}
+					const result = await MessageEnhancer.enhanceMessage({
+						text: message.text,
+						apiConfiguration,
+						customSupportPrompts,
+						listApiConfigMeta,
+						enhancementApiConfigId,
+						includeTaskHistoryInEnhance,
+						currentClineMessages: currentCline?.clineMessages,
+						providerSettingsManager: provider.providerSettingsManager,
+					})
+
+					if (result.success && result.enhancedText) {
+						// Capture telemetry for prompt enhancement
+						MessageEnhancer.captureTelemetry(currentCline?.taskId, includeTaskHistoryInEnhance)
+						await provider.postMessageToWebview({ type: "enhancedPrompt", text: result.enhancedText })
+					} else {
+						throw new Error(result.error || "Unknown error")
 					}
-
-					const enhancedPrompt = await singleCompletionHandler(
-						configToUse,
-						supportPrompt.create("ENHANCE", { userInput: message.text }, customSupportPrompts),
-					)
-
-					// Capture telemetry for prompt enhancement.
-					const currentCline = provider.getCurrentCline()
-					TelemetryService.instance.capturePromptEnhanced(currentCline?.taskId)
-
-					await provider.postMessageToWebview({ type: "enhancedPrompt", text: enhancedPrompt })
 				} catch (error) {
 					provider.log(
 						`Error enhancing prompt: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
@@ -1426,7 +1788,7 @@ export const webviewMessageHandler = async (
 			}
 			break
 		case "searchCommits": {
-			const cwd = provider.cwd
+			const cwd = getCurrentCwd()
 			if (cwd) {
 				try {
 					const commits = await searchCommits(message.query || "", cwd)
@@ -1468,7 +1830,7 @@ export const webviewMessageHandler = async (
 		}
 		// kilocode_change end
 		case "searchFiles": {
-			const workspacePath = getWorkspacePath()
+			const workspacePath = getCurrentCwd()
 
 			if (!workspacePath) {
 				// Handle case where workspace path is not available
@@ -1530,9 +1892,40 @@ export const webviewMessageHandler = async (
 			}
 			break
 		case "upsertApiConfiguration":
+			// kilocode_change start: check for kilocodeToken change to remove organizationId
 			if (message.text && message.apiConfiguration) {
-				await provider.upsertProviderProfile(message.text, message.apiConfiguration)
+				let configToSave = message.apiConfiguration
+				try {
+					const { ...currentConfig } = await provider.providerSettingsManager.getProfile({
+						name: message.text,
+					})
+					// Only clear organization ID if we actually had a kilocode token before and it's different now
+					const hadPreviousToken = currentConfig.kilocodeToken !== undefined
+					const hasNewToken = message.apiConfiguration.kilocodeToken !== undefined
+					const tokensAreDifferent = currentConfig.kilocodeToken !== message.apiConfiguration.kilocodeToken
+
+					if (hadPreviousToken && hasNewToken && tokensAreDifferent) {
+						configToSave = { ...message.apiConfiguration, kilocodeOrganizationId: undefined }
+					}
+					if (currentConfig.kilocodeOrganizationId !== message.apiConfiguration.kilocodeOrganizationId) {
+						await flushModels("kilocode-openrouter")
+						const models = await getModels({
+							provider: "kilocode-openrouter",
+							kilocodeOrganizationId: message.apiConfiguration.kilocodeOrganizationId,
+							kilocodeToken: message.apiConfiguration.kilocodeToken,
+						})
+						provider.postMessageToWebview({
+							type: "routerModels",
+							routerModels: { "kilocode-openrouter": models } as Record<RouterName, ModelRecord>,
+						})
+					}
+				} catch (error) {
+					// Config might not exist yet, that's fine
+				}
+
+				await provider.upsertProviderProfile(message.text, configToSave)
 			}
+			// kilocode_change end
 			break
 		case "renameApiConfiguration":
 			if (message.values && message.apiConfiguration) {
@@ -1625,12 +2018,17 @@ export const webviewMessageHandler = async (
 			break
 		case "deleteMessageConfirm":
 			if (message.messageTs) {
-				await handleDeleteMessageConfirm(message.messageTs)
+				await handleDeleteMessageConfirm(message.messageTs, message.restoreCheckpoint)
 			}
 			break
 		case "editMessageConfirm":
 			if (message.messageTs && message.text) {
-				await handleEditMessageConfirm(message.messageTs, message.text, message.images)
+				await handleEditMessageConfirm(
+					message.messageTs,
+					message.text,
+					message.restoreCheckpoint,
+					message.images,
+				)
 			}
 			break
 		case "getListApiConfiguration":
@@ -2009,12 +2407,26 @@ export const webviewMessageHandler = async (
 				}
 
 				// Changed to /api/profile
-				const response = await axios.get("https://kilocode.ai/api/profile", {
-					headers: {
-						Authorization: `Bearer ${kilocodeToken}`,
-						"Content-Type": "application/json",
+				const response = await axios.get<Omit<ProfileData, "kilocodeToken">>(
+					`${getKiloBaseUriFromToken(kilocodeToken)}/api/profile`,
+					{
+						headers: {
+							Authorization: `Bearer ${kilocodeToken}`,
+							"Content-Type": "application/json",
+						},
 					},
-				})
+				)
+
+				// Go back to Personal when no longer part of the current set organization
+				const organizationExists = (response.data.organizations ?? []).some(
+					({ id }) => id === apiConfiguration?.kilocodeOrganizationId,
+				)
+				if (apiConfiguration?.kilocodeOrganizationId && !organizationExists) {
+					provider.upsertProviderProfile(provider.providerSettingsManager.activateProfile.name, {
+						...apiConfiguration,
+						kilocodeOrganizationId: undefined,
+					})
+				}
 
 				provider.postMessageToWebview({
 					type: "profileDataResponse", // Assuming this response type is still appropriate for /api/profile
@@ -2035,7 +2447,7 @@ export const webviewMessageHandler = async (
 		case "fetchBalanceDataRequest": // New handler
 			try {
 				const { apiConfiguration } = await provider.getState()
-				const kilocodeToken = apiConfiguration?.kilocodeToken
+				const { kilocodeToken, kilocodeOrganizationId } = apiConfiguration ?? {}
 
 				if (!kilocodeToken) {
 					provider.log("KiloCode token not found in extension state for balance data.")
@@ -2046,12 +2458,18 @@ export const webviewMessageHandler = async (
 					break
 				}
 
-				const response = await axios.get("https://kilocode.ai/api/profile/balance", {
+				const headers: Record<string, string> = {
+					Authorization: `Bearer ${kilocodeToken}`,
+					"Content-Type": "application/json",
+				}
+
+				if (kilocodeOrganizationId) {
+					headers["X-KiloCode-OrganizationId"] = kilocodeOrganizationId
+				}
+
+				const response = await axios.get(`${getKiloBaseUriFromToken(kilocodeToken)}/api/profile/balance`, {
 					// Original path for balance
-					headers: {
-						Authorization: `Bearer ${kilocodeToken}`,
-						"Content-Type": "application/json",
-					},
+					headers,
 				})
 				provider.postMessageToWebview({
 					type: "balanceDataResponse", // New response type
@@ -2064,6 +2482,45 @@ export const webviewMessageHandler = async (
 				provider.postMessageToWebview({
 					type: "balanceDataResponse", // New response type
 					payload: { success: false, error: errorMessage },
+				})
+			}
+			break
+		case "shopBuyCredits": // New handler
+			try {
+				const { apiConfiguration } = await provider.getState()
+				const kilocodeToken = apiConfiguration?.kilocodeToken
+				if (!kilocodeToken) {
+					provider.log("KiloCode token not found in extension state for buy credits.")
+					break
+				}
+				const credits = message.values?.credits || 50
+				const uriScheme = message.values?.uriScheme || "vscode"
+				const uiKind = message.values?.uiKind || "Desktop"
+				const source = uiKind === "Web" ? "web" : uriScheme
+
+				const baseUrl = getKiloBaseUriFromToken(kilocodeToken)
+				const response = await axios.post(
+					`${baseUrl}/payments/topup?origin=extension&source=${source}&amount=${credits}`,
+					{},
+					{
+						headers: {
+							Authorization: `Bearer ${kilocodeToken}`,
+							"Content-Type": "application/json",
+						},
+						maxRedirects: 0, // Prevent axios from following redirects automatically
+						validateStatus: (status) => status < 400, // Accept 3xx status codes
+					},
+				)
+				if (response.status !== 303 || !response.headers.location) {
+					return
+				}
+				await vscode.env.openExternal(vscode.Uri.parse(response.headers.location))
+			} catch (error: any) {
+				const errorMessage = error?.message || "Unknown error"
+				const errorStack = error?.stack ? ` Stack: ${error.stack}` : ""
+				provider.log(`Error redirecting to payment page: ${errorMessage}.${errorStack}`)
+				provider.postMessageToWebview({
+					type: "updateProfileData",
 				})
 			}
 			break
@@ -2149,7 +2606,7 @@ export const webviewMessageHandler = async (
 		}
 
 		case "reportBug":
-			provider.getCurrentCline()?.handleWebviewAskResponse("yesButtonClicked")
+			provider.getCurrentTask()?.handleWebviewAskResponse("yesButtonClicked")
 			break
 		// end kilocode_change
 		case "telemetrySetting": {
@@ -2161,9 +2618,9 @@ export const webviewMessageHandler = async (
 			await provider.postStateToWebview()
 			break
 		}
-		case "accountButtonClicked": {
-			// Navigate to the account tab.
-			provider.postMessageToWebview({ type: "action", action: "accountButtonClicked" })
+		case "cloudButtonClicked": {
+			// Navigate to the cloud tab.
+			provider.postMessageToWebview({ type: "action", action: "cloudButtonClicked" })
 			break
 		}
 		case "rooCloudSignIn": {
@@ -2239,6 +2696,18 @@ export const webviewMessageHandler = async (
 						settings.codebaseIndexGeminiApiKey,
 					)
 				}
+				if (settings.codebaseIndexMistralApiKey !== undefined) {
+					await provider.contextProxy.storeSecret(
+						"codebaseIndexMistralApiKey",
+						settings.codebaseIndexMistralApiKey,
+					)
+				}
+				if (settings.codebaseIndexVercelAiGatewayApiKey !== undefined) {
+					await provider.contextProxy.storeSecret(
+						"codebaseIndexVercelAiGatewayApiKey",
+						settings.codebaseIndexVercelAiGatewayApiKey,
+					)
+				}
 
 				// Send success response first - settings are saved regardless of validation
 				await provider.postMessageToWebview({
@@ -2250,13 +2719,14 @@ export const webviewMessageHandler = async (
 				// Update webview state
 				await provider.postStateToWebview()
 
-				// Then handle validation and initialization
-				if (provider.codeIndexManager) {
+				// Then handle validation and initialization for the current workspace
+				const currentCodeIndexManager = provider.getCurrentWorkspaceCodeIndexManager()
+				if (currentCodeIndexManager) {
 					// If embedder provider changed, perform proactive validation
 					if (embedderProviderChanged) {
 						try {
 							// Force handleSettingsChange which will trigger validation
-							await provider.codeIndexManager.handleSettingsChange()
+							await currentCodeIndexManager.handleSettingsChange()
 						} catch (error) {
 							// Validation failed - the error state is already set by handleSettingsChange
 							provider.log(
@@ -2265,7 +2735,7 @@ export const webviewMessageHandler = async (
 							// Send validation error to webview
 							await provider.postMessageToWebview({
 								type: "indexingStatusUpdate",
-								values: provider.codeIndexManager.getCurrentStatus(),
+								values: currentCodeIndexManager.getCurrentStatus(),
 							})
 							// Exit early - don't try to start indexing with invalid configuration
 							break
@@ -2273,7 +2743,7 @@ export const webviewMessageHandler = async (
 					} else {
 						// No provider change, just handle settings normally
 						try {
-							await provider.codeIndexManager.handleSettingsChange()
+							await currentCodeIndexManager.handleSettingsChange()
 						} catch (error) {
 							// Log but don't fail - settings are saved
 							provider.log(
@@ -2286,10 +2756,10 @@ export const webviewMessageHandler = async (
 					await new Promise((resolve) => setTimeout(resolve, 200))
 
 					// Auto-start indexing if now enabled and configured
-					if (provider.codeIndexManager.isFeatureEnabled && provider.codeIndexManager.isFeatureConfigured) {
-						if (!provider.codeIndexManager.isInitialized) {
+					if (currentCodeIndexManager.isFeatureEnabled && currentCodeIndexManager.isFeatureConfigured) {
+						if (!currentCodeIndexManager.isInitialized) {
 							try {
-								await provider.codeIndexManager.initialize(provider.contextProxy)
+								await currentCodeIndexManager.initialize(provider.contextProxy)
 								provider.log(`Code index manager initialized after settings save`)
 							} catch (error) {
 								provider.log(
@@ -2298,11 +2768,24 @@ export const webviewMessageHandler = async (
 								// Send error status to webview
 								await provider.postMessageToWebview({
 									type: "indexingStatusUpdate",
-									values: provider.codeIndexManager.getCurrentStatus(),
+									values: currentCodeIndexManager.getCurrentStatus(),
 								})
 							}
 						}
 					}
+				} else {
+					// No workspace open - send error status
+					provider.log("Cannot save code index settings: No workspace folder open")
+					await provider.postMessageToWebview({
+						type: "indexingStatusUpdate",
+						values: {
+							systemStatus: "Error",
+							message: t("embeddings:orchestrator.indexingRequiresWorkspace"),
+							processedItems: 0,
+							totalItems: 0,
+							currentItemUnit: "items",
+						},
+					})
 				}
 			} catch (error) {
 				provider.log(`Error saving code index settings: ${error.message || error}`)
@@ -2316,7 +2799,34 @@ export const webviewMessageHandler = async (
 		}
 
 		case "requestIndexingStatus": {
-			const status = provider.codeIndexManager!.getCurrentStatus()
+			const manager = provider.getCurrentWorkspaceCodeIndexManager()
+			if (!manager) {
+				// No workspace open - send error status
+				provider.postMessageToWebview({
+					type: "indexingStatusUpdate",
+					values: {
+						systemStatus: "Error",
+						message: t("embeddings:orchestrator.indexingRequiresWorkspace"),
+						processedItems: 0,
+						totalItems: 0,
+						currentItemUnit: "items",
+						workerspacePath: undefined,
+					},
+				})
+				return
+			}
+
+			const status = manager
+				? manager.getCurrentStatus()
+				: {
+						systemStatus: "Standby",
+						message: "No workspace folder open",
+						processedItems: 0,
+						totalItems: 0,
+						currentItemUnit: "items",
+						workspacePath: undefined,
+					}
+
 			provider.postMessageToWebview({
 				type: "indexingStatusUpdate",
 				values: status,
@@ -2331,6 +2841,10 @@ export const webviewMessageHandler = async (
 				"codebaseIndexOpenAiCompatibleApiKey",
 			))
 			const hasGeminiApiKey = !!(await provider.context.secrets.get("codebaseIndexGeminiApiKey"))
+			const hasMistralApiKey = !!(await provider.context.secrets.get("codebaseIndexMistralApiKey"))
+			const hasVercelAiGatewayApiKey = !!(await provider.context.secrets.get(
+				"codebaseIndexVercelAiGatewayApiKey",
+			))
 
 			provider.postMessageToWebview({
 				type: "codeIndexSecretStatus",
@@ -2339,19 +2853,44 @@ export const webviewMessageHandler = async (
 					hasQdrantApiKey,
 					hasOpenAiCompatibleApiKey,
 					hasGeminiApiKey,
+					hasMistralApiKey,
+					hasVercelAiGatewayApiKey,
 				},
 			})
 			break
 		}
 		case "startIndexing": {
 			try {
-				const manager = provider.codeIndexManager!
+				const manager = provider.getCurrentWorkspaceCodeIndexManager()
+				if (!manager) {
+					// No workspace open - send error status
+					provider.postMessageToWebview({
+						type: "indexingStatusUpdate",
+						values: {
+							systemStatus: "Error",
+							message: t("embeddings:orchestrator.indexingRequiresWorkspace"),
+							processedItems: 0,
+							totalItems: 0,
+							currentItemUnit: "items",
+						},
+					})
+					provider.log("Cannot start indexing: No workspace folder open")
+					return
+				}
 				if (manager.isFeatureEnabled && manager.isFeatureConfigured) {
 					if (!manager.isInitialized) {
 						await manager.initialize(provider.contextProxy)
 					}
 
+					// startIndexing now handles error recovery internally
 					manager.startIndexing()
+
+					// If startIndexing recovered from error, we need to reinitialize
+					if (!manager.isInitialized) {
+						await manager.initialize(provider.contextProxy)
+						// Try starting again after initialization
+						manager.startIndexing()
+					}
 				}
 			} catch (error) {
 				provider.log(`Error starting indexing: ${error instanceof Error ? error.message : String(error)}`)
@@ -2360,7 +2899,18 @@ export const webviewMessageHandler = async (
 		}
 		case "clearIndexData": {
 			try {
-				const manager = provider.codeIndexManager!
+				const manager = provider.getCurrentWorkspaceCodeIndexManager()
+				if (!manager) {
+					provider.log("Cannot clear index data: No workspace folder open")
+					provider.postMessageToWebview({
+						type: "indexCleared",
+						values: {
+							success: false,
+							error: t("embeddings:orchestrator.indexingRequiresWorkspace"),
+						},
+					})
+					return
+				}
 				await manager.clearIndexData()
 				provider.postMessageToWebview({ type: "indexCleared", values: { success: true } })
 			} catch (error) {
@@ -2375,12 +2925,45 @@ export const webviewMessageHandler = async (
 			}
 			break
 		}
-		// kilocode_change start
+		// kilocode_change start - add clearUsageData
+		case "clearUsageData": {
+			try {
+				const usageTracker = UsageTracker.getInstance()
+				await usageTracker.clearAllUsageData()
+				vscode.window.showInformationMessage("Usage data has been successfully cleared.")
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				provider.log(`Error clearing usage data: ${errorMessage}`)
+				vscode.window.showErrorMessage(`Failed to clear usage data: ${errorMessage}`)
+			}
+			break
+		}
+		// kilocode_change start - add getUsageData
+		case "getUsageData": {
+			if (message.text) {
+				try {
+					const usageTracker = UsageTracker.getInstance()
+					const usageData = usageTracker.getAllUsage(message.text)
+					await provider.postMessageToWebview({
+						type: "usageDataResponse",
+						text: message.text,
+						values: usageData,
+					})
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error)
+					provider.log(`Error getting usage data: ${errorMessage}`)
+				}
+			}
+			break
+		}
+		// kilocode_change end - add getUsageData
+		// kilocode_change start - add toggleTaskFavorite
 		case "toggleTaskFavorite":
 			if (message.text) {
 				await provider.toggleTaskFavorite(message.text)
 			}
 			break
+		// kilocode_change start - add fixMermaidSyntax
 		case "fixMermaidSyntax":
 			if (message.text && message.requestId) {
 				try {
@@ -2473,8 +3056,45 @@ export const webviewMessageHandler = async (
 				try {
 					await marketplaceManager.removeInstalledMarketplaceItem(message.mpItem, message.mpInstallOptions)
 					await provider.postStateToWebview()
+
+					// Send success message to webview
+					provider.postMessageToWebview({
+						type: "marketplaceRemoveResult",
+						success: true,
+						slug: message.mpItem.id,
+					})
 				} catch (error) {
 					console.error(`Error removing marketplace item: ${error}`)
+
+					// Show error message to user
+					vscode.window.showErrorMessage(
+						`Failed to remove marketplace item: ${error instanceof Error ? error.message : String(error)}`,
+					)
+
+					// Send error message to webview
+					provider.postMessageToWebview({
+						type: "marketplaceRemoveResult",
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+						slug: message.mpItem.id,
+					})
+				}
+			} else {
+				// MarketplaceManager not available or missing required parameters
+				const errorMessage = !marketplaceManager
+					? "Marketplace manager is not available"
+					: "Missing required parameters for marketplace item removal"
+				console.error(errorMessage)
+
+				vscode.window.showErrorMessage(errorMessage)
+
+				if (message.mpItem?.id) {
+					provider.postMessageToWebview({
+						type: "marketplaceRemoveResult",
+						success: false,
+						error: errorMessage,
+						slug: message.mpItem.id,
+					})
 				}
 			}
 			break
@@ -2514,9 +3134,249 @@ export const webviewMessageHandler = async (
 			await editMessageHandler(provider, message)
 			break
 		}
+		case "fetchKilocodeNotifications": {
+			await fetchKilocodeNotificationsHandler(provider)
+			break
+		}
+		case "dismissNotificationId": {
+			if (!message.notificationId) {
+				break
+			}
+
+			const dismissedNotificationIds = getGlobalState("dismissedNotificationIds") || []
+
+			await updateGlobalState("dismissedNotificationIds", [...dismissedNotificationIds, message.notificationId])
+			await provider.postStateToWebview()
+			break
+		}
 		// kilocode_change end
 		case "insertTextToChatArea":
 			provider.postMessageToWebview({ type: "insertTextToChatArea", text: message.text })
 			break
+		case "requestCommands": {
+			try {
+				const { getCommands } = await import("../../services/command/commands")
+				const commands = await getCommands(getCurrentCwd())
+
+				// Convert to the format expected by the frontend
+				const commandList = commands.map((command) => ({
+					name: command.name,
+					source: command.source,
+					filePath: command.filePath,
+					description: command.description,
+					argumentHint: command.argumentHint,
+				}))
+
+				await provider.postMessageToWebview({
+					type: "commands",
+					commands: commandList,
+				})
+			} catch (error) {
+				provider.log(`Error fetching commands: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`)
+				// Send empty array on error
+				await provider.postMessageToWebview({
+					type: "commands",
+					commands: [],
+				})
+			}
+			break
+		}
+		case "openCommandFile": {
+			try {
+				if (message.text) {
+					const { getCommand } = await import("../../services/command/commands")
+					const command = await getCommand(getCurrentCwd(), message.text)
+
+					if (command && command.filePath) {
+						openFile(command.filePath)
+					} else {
+						vscode.window.showErrorMessage(t("common:errors.command_not_found", { name: message.text }))
+					}
+				}
+			} catch (error) {
+				provider.log(
+					`Error opening command file: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+				)
+				vscode.window.showErrorMessage(t("common:errors.open_command_file"))
+			}
+			break
+		}
+		case "deleteCommand": {
+			try {
+				if (message.text && message.values?.source) {
+					const { getCommand } = await import("../../services/command/commands")
+					const command = await getCommand(getCurrentCwd(), message.text)
+
+					if (command && command.filePath) {
+						// Delete the command file
+						await fs.unlink(command.filePath)
+						provider.log(`Deleted command file: ${command.filePath}`)
+					} else {
+						vscode.window.showErrorMessage(t("common:errors.command_not_found", { name: message.text }))
+					}
+				}
+			} catch (error) {
+				provider.log(`Error deleting command: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`)
+				vscode.window.showErrorMessage(t("common:errors.delete_command"))
+			}
+			break
+		}
+		case "createCommand": {
+			try {
+				const source = message.values?.source as "global" | "project"
+				const fileName = message.text // Custom filename from user input
+
+				if (!source) {
+					provider.log("Missing source for createCommand")
+					break
+				}
+
+				// Determine the commands directory based on source
+				let commandsDir: string
+				if (source === "global") {
+					const globalConfigDir = path.join(os.homedir(), ".roo")
+					commandsDir = path.join(globalConfigDir, "commands")
+				} else {
+					if (!vscode.workspace.workspaceFolders?.length) {
+						vscode.window.showErrorMessage(t("common:errors.no_workspace"))
+						return
+					}
+					// Project commands
+					const workspaceRoot = getCurrentCwd()
+					if (!workspaceRoot) {
+						vscode.window.showErrorMessage(t("common:errors.no_workspace_for_project_command"))
+						break
+					}
+					commandsDir = path.join(workspaceRoot, ".roo", "commands")
+				}
+
+				// Ensure the commands directory exists
+				await fs.mkdir(commandsDir, { recursive: true })
+
+				// Use provided filename or generate a unique one
+				let commandName: string
+				if (fileName && fileName.trim()) {
+					let cleanFileName = fileName.trim()
+
+					// Strip leading slash if present
+					if (cleanFileName.startsWith("/")) {
+						cleanFileName = cleanFileName.substring(1)
+					}
+
+					// Remove .md extension if present BEFORE slugification
+					if (cleanFileName.toLowerCase().endsWith(".md")) {
+						cleanFileName = cleanFileName.slice(0, -3)
+					}
+
+					// Slugify the command name: lowercase, replace spaces with dashes, remove special characters
+					commandName = cleanFileName
+						.toLowerCase()
+						.replace(/\s+/g, "-") // Replace spaces with dashes
+						.replace(/[^a-z0-9-]/g, "") // Remove special characters except dashes
+						.replace(/-+/g, "-") // Replace multiple dashes with single dash
+						.replace(/^-|-$/g, "") // Remove leading/trailing dashes
+
+					// Ensure we have a valid command name
+					if (!commandName || commandName.length === 0) {
+						commandName = "new-command"
+					}
+				} else {
+					// Generate a unique command name
+					commandName = "new-command"
+					let counter = 1
+					let filePath = path.join(commandsDir, `${commandName}.md`)
+
+					while (
+						await fs
+							.access(filePath)
+							.then(() => true)
+							.catch(() => false)
+					) {
+						commandName = `new-command-${counter}`
+						filePath = path.join(commandsDir, `${commandName}.md`)
+						counter++
+					}
+				}
+
+				const filePath = path.join(commandsDir, `${commandName}.md`)
+
+				// Check if file already exists
+				if (
+					await fs
+						.access(filePath)
+						.then(() => true)
+						.catch(() => false)
+				) {
+					vscode.window.showErrorMessage(t("common:errors.command_already_exists", { commandName }))
+					break
+				}
+
+				// Create the command file with template content
+				const templateContent = t("common:errors.command_template_content")
+
+				await fs.writeFile(filePath, templateContent, "utf8")
+				provider.log(`Created new command file: ${filePath}`)
+
+				// Open the new file in the editor
+				openFile(filePath)
+
+				// Refresh commands list
+				const { getCommands } = await import("../../services/command/commands")
+				const commands = await getCommands(getCurrentCwd() || "")
+				const commandList = commands.map((command) => ({
+					name: command.name,
+					source: command.source,
+					filePath: command.filePath,
+					description: command.description,
+					argumentHint: command.argumentHint,
+				}))
+				await provider.postMessageToWebview({
+					type: "commands",
+					commands: commandList,
+				})
+			} catch (error) {
+				provider.log(`Error creating command: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`)
+				vscode.window.showErrorMessage(t("common:errors.create_command_failed"))
+			}
+			break
+		}
+
+		case "insertTextIntoTextarea": {
+			const text = message.text
+			if (text) {
+				// Send message to insert text into the chat textarea
+				await provider.postMessageToWebview({
+					type: "insertTextIntoTextarea",
+					text: text,
+				})
+			}
+			break
+		}
+		case "showMdmAuthRequiredNotification": {
+			// Show notification that organization requires authentication
+			vscode.window.showWarningMessage(t("common:mdm.info.organization_requires_auth"))
+			break
+		}
+
+		/**
+		 * Chat Message Queue
+		 */
+
+		case "queueMessage": {
+			provider.getCurrentTask()?.messageQueueService.addMessage(message.text ?? "", message.images)
+			break
+		}
+		case "removeQueuedMessage": {
+			provider.getCurrentTask()?.messageQueueService.removeMessage(message.text ?? "")
+			break
+		}
+		case "editQueuedMessage": {
+			if (message.payload) {
+				const { id, text, images } = message.payload as EditQueuedMessagePayload
+				provider.getCurrentTask()?.messageQueueService.updateMessage(id, text, images)
+			}
+
+			break
+		}
 	}
 }

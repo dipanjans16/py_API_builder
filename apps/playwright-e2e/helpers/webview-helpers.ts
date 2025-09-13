@@ -24,22 +24,25 @@ export async function waitForWebviewText(page: Page, text: string, timeout: numb
 
 export async function postWebviewMessage(page: Page, message: WebviewMessage): Promise<void> {
 	const webviewFrame = await findWebview(page)
-	await webviewFrame.locator("body").evaluate((element, msg) => {
-		if (!window.vscode) {
-			throw new Error("Global vscode API not found")
+
+	// Retry mechanism for VSCode API availability
+	const maxRetries = 3
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			await webviewFrame.locator("body").evaluate((element, msg) => {
+				if (!window.vscode) {
+					throw new Error("Global vscode API not found")
+				}
+
+				window.vscode.postMessage(msg)
+			}, message)
+			return // Success - exit the retry loop
+		} catch (error) {
+			if (attempt === maxRetries) {
+				throw error // Re-throw on final attempt
+			}
+			await page.waitForTimeout(1000)
 		}
-
-		window.vscode.postMessage(msg)
-	}, message)
-}
-
-export async function verifyExtensionInstalled(page: Page) {
-	try {
-		const activityBarIcon = page.locator('[aria-label*="Kilo"], [title*="Kilo"]').first()
-		expect(await activityBarIcon).toBeDefined()
-		console.log("✅ Extension installed!")
-	} catch (_error) {
-		throw new Error("Failed to find the installed extension! Check if the build failed and try again.")
 	}
 }
 

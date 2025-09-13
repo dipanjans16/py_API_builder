@@ -7,6 +7,7 @@ import {
 	OPENROUTER_DEFAULT_PROVIDER_NAME,
 	OPEN_ROUTER_PROMPT_CACHING_MODELS,
 	DEEP_SEEK_DEFAULT_TEMPERATURE,
+	ModelInfo, // kilocode_change
 } from "@roo-code/types"
 
 import type { ApiHandlerOptions, ModelRecord } from "../../shared/api"
@@ -28,6 +29,46 @@ import type {
 	ApiHandlerCreateMessageMetadata, // kilocode_change
 	SingleCompletionHandler,
 } from "../index"
+import { verifyFinishReason } from "./kilocode/verifyFinishReason"
+
+// kilocode_change start
+type OpenRouterProviderParams = {
+	order?: string[]
+	only?: string[]
+	ignore?: string[] // kilocode_change
+	allow_fallbacks?: boolean
+	data_collection?: "allow" | "deny"
+	sort?: "price" | "throughput" | "latency"
+}
+// kilocode_change end
+import { handleOpenAIError } from "./utils/openai-error-handler"
+
+// Image generation types
+interface ImageGenerationResponse {
+	choices?: Array<{
+		message?: {
+			content?: string
+			images?: Array<{
+				type?: string
+				image_url?: {
+					url?: string
+				}
+			}>
+		}
+	}>
+	error?: {
+		message?: string
+		type?: string
+		code?: string
+	}
+}
+
+export interface ImageGenerationResult {
+	success: boolean
+	imageData?: string
+	imageFormat?: string
+	error?: string
+}
 
 // Add custom interface for OpenRouter params.
 type OpenRouterChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParams & {
@@ -35,11 +76,13 @@ type OpenRouterChatCompletionParams = OpenAI.Chat.ChatCompletionCreateParams & {
 	include_reasoning?: boolean
 	// https://openrouter.ai/docs/use-cases/reasoning-tokens
 	reasoning?: OpenRouterReasoningParams
+	provider?: OpenRouterProviderParams // kilocode_change
 }
 
 // See `OpenAI.Chat.Completions.ChatCompletionChunk["usage"]`
 // `CompletionsAPI.CompletionUsage`
 // See also: https://openrouter.ai/docs/use-cases/usage-accounting
+export // kilocode_change
 interface CompletionUsage {
 	completion_tokens?: number
 	completion_tokens_details?: {
@@ -51,6 +94,7 @@ interface CompletionUsage {
 	}
 	total_tokens?: number
 	cost?: number
+	is_byok?: boolean // kilocode_change
 	cost_details?: {
 		upstream_inference_cost?: number
 	}
@@ -61,6 +105,12 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 	private client: OpenAI
 	protected models: ModelRecord = {}
 	protected endpoints: ModelRecord = {}
+
+	// kilocode_change start property
+	protected get providerName() {
+		return "OpenRouter"
+	}
+	// kilocode_change end
 
 	constructor(options: ApiHandlerOptions) {
 		super()
@@ -73,8 +123,55 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 	}
 
 	// kilocode_change start
-	customRequestOptions(_metadata?: ApiHandlerCreateMessageMetadata): OpenAI.RequestOptions | undefined {
+	customRequestOptions(_metadata?: ApiHandlerCreateMessageMetadata): { headers: Record<string, string> } | undefined {
 		return undefined
+	}
+
+	getCustomRequestHeaders(taskId?: string) {
+		return (taskId ? this.customRequestOptions({ taskId })?.headers : undefined) ?? {}
+	}
+
+	getTotalCost(lastUsage: CompletionUsage): number {
+		return (lastUsage.cost_details?.upstream_inference_cost || 0) + (lastUsage.cost || 0)
+	}
+
+	getIgnoredProviders(model: ModelInfo): string[] | undefined {
+		const endpoints = Object.entries(this.endpoints)
+		const ignoredProviders = endpoints
+			.filter((endpoint) => endpoint[1].contextWindow < model.contextWindow)
+			.map((endpoint) => endpoint[0])
+		if (ignoredProviders.length > 0 && ignoredProviders.length < endpoints.length) {
+			return ignoredProviders
+		}
+		return undefined
+	}
+
+	getProviderParams(model: ModelInfo): { provider?: OpenRouterProviderParams } {
+		if (this.options.openRouterSpecificProvider && this.endpoints[this.options.openRouterSpecificProvider]) {
+			return {
+				provider: {
+					order: [this.options.openRouterSpecificProvider],
+					only: [this.options.openRouterSpecificProvider],
+					allow_fallbacks: false,
+					data_collection: this.options.openRouterProviderDataCollection,
+				},
+			}
+		}
+		const ignoredProviders = this.getIgnoredProviders(model)
+		if (
+			(ignoredProviders?.length ?? 0) > 0 ||
+			this.options.openRouterProviderDataCollection ||
+			this.options.openRouterProviderSort
+		) {
+			return {
+				provider: {
+					ignore: ignoredProviders,
+					data_collection: this.options.openRouterProviderDataCollection,
+					sort: this.options.openRouterProviderSort,
+				},
+			}
+		}
+		return {}
 	}
 	// kilocode_change end
 
@@ -131,23 +228,20 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 			messages: openAiMessages,
 			stream: true,
 			stream_options: { include_usage: true },
-			// Only include provider if openRouterSpecificProvider is not "[default]".
-			...(this.options.openRouterSpecificProvider &&
-				this.options.openRouterSpecificProvider !== OPENROUTER_DEFAULT_PROVIDER_NAME && {
-					provider: {
-						order: [this.options.openRouterSpecificProvider],
-						only: [this.options.openRouterSpecificProvider],
-						allow_fallbacks: false,
-					},
-				}),
+			...this.getProviderParams(model.info), // kilocode_change: original expression was moved into function
 			...(transforms && { transforms }),
 			...(reasoning && { reasoning }),
 		}
+
 		let stream
-		stream = await this.client.chat.completions.create(
-			completionParams,
-			this.customRequestOptions(metadata), // kilocode_change
-		)
+		try {
+			stream = await this.client.chat.completions.create(
+				completionParams,
+				this.customRequestOptions(metadata), // kilocode_change
+			)
+		} catch (error) {
+			throw handleOpenAIError(error, this.providerName)
+		}
 
 		let lastUsage: CompletionUsage | undefined = undefined
 
@@ -160,11 +254,23 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 					throw new Error(`OpenRouter API Error ${error?.code}: ${error?.message}`)
 				}
 
+				verifyFinishReason(chunk.choices[0]) // kilocode_change
 				const delta = chunk.choices[0]?.delta
 
-				if ("reasoning" in delta && delta.reasoning && typeof delta.reasoning === "string") {
+				if (
+					delta /* kilocode_change */ &&
+					"reasoning" in delta &&
+					delta.reasoning &&
+					typeof delta.reasoning === "string"
+				) {
 					yield { type: "reasoning", text: delta.reasoning }
 				}
+
+				// kilocode_change start
+				if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
+					yield { type: "reasoning", text: delta.reasoning_content }
+				}
+				// kilocode_change end
 
 				if (delta?.content) {
 					yield { type: "text", text: delta.content }
@@ -186,7 +292,7 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 				outputTokens: lastUsage.completion_tokens || 0,
 				cacheReadTokens: lastUsage.prompt_tokens_details?.cached_tokens,
 				reasoningTokens: lastUsage.completion_tokens_details?.reasoning_tokens,
-				totalCost: (lastUsage.cost_details?.upstream_inference_cost || 0) + (lastUsage.cost || 0),
+				totalCost: this.getTotalCost(lastUsage), // kilocode_change
 			}
 		}
 	}
@@ -230,7 +336,13 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 	}
 
 	async completePrompt(prompt: string) {
-		let { id: modelId, maxTokens, temperature, reasoning } = await this.fetchModel()
+		let {
+			id: modelId,
+			maxTokens,
+			temperature,
+			reasoning,
+			info: modelInfo, // kilocode_change
+		} = await this.fetchModel()
 
 		const completionParams: OpenRouterChatCompletionParams = {
 			model: modelId,
@@ -238,19 +350,19 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 			temperature,
 			messages: [{ role: "user", content: prompt }],
 			stream: false,
-			// Only include provider if openRouterSpecificProvider is not "[default]".
-			...(this.options.openRouterSpecificProvider &&
-				this.options.openRouterSpecificProvider !== OPENROUTER_DEFAULT_PROVIDER_NAME && {
-					provider: {
-						order: [this.options.openRouterSpecificProvider],
-						only: [this.options.openRouterSpecificProvider],
-						allow_fallbacks: false,
-					},
-				}),
+			...this.getProviderParams(modelInfo), // kilocode_change: original expression was moved into function
 			...(reasoning && { reasoning }),
 		}
 
-		const response = await this.client.chat.completions.create(completionParams)
+		let response
+		try {
+			response = await this.client.chat.completions.create(
+				completionParams,
+				this.customRequestOptions(), // kilocode_change
+			)
+		} catch (error) {
+			throw handleOpenAIError(error, this.providerName)
+		}
 
 		if ("error" in response) {
 			const error = response.error as { message?: string; code?: number }
@@ -259,6 +371,132 @@ export class OpenRouterHandler extends BaseProvider implements SingleCompletionH
 
 		const completion = response as OpenAI.Chat.ChatCompletion
 		return completion.choices[0]?.message?.content || ""
+	}
+
+	/**
+	 * Generate an image using OpenRouter's image generation API
+	 * @param prompt The text prompt for image generation
+	 * @param model The model to use for generation
+	 * @param apiKey The OpenRouter API key (must be explicitly provided)
+	 * @param inputImage Optional base64 encoded input image data URL
+	 * @returns The generated image data and format, or an error
+	 */
+	async generateImage(
+		prompt: string,
+		model: string,
+		apiKey: string,
+		inputImage?: string,
+		taskId?: string, // kilocode_change
+	): Promise<ImageGenerationResult> {
+		if (!apiKey) {
+			return {
+				success: false,
+				error: "OpenRouter API key is required for image generation",
+			}
+		}
+
+		try {
+			const response = await fetch(
+				`${this.options.openRouterBaseUrl || "https://openrouter.ai/api/v1/"}chat/completions`, // kilocode_change: support baseUrl
+				{
+					method: "POST",
+					headers: {
+						// kilocode_change start
+						...DEFAULT_HEADERS,
+						...this.getCustomRequestHeaders(taskId),
+						// kilocode_change end
+						Authorization: `Bearer ${apiKey}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						model,
+						messages: [
+							{
+								role: "user",
+								content: inputImage
+									? [
+											{
+												type: "text",
+												text: prompt,
+											},
+											{
+												type: "image_url",
+												image_url: {
+													url: inputImage,
+												},
+											},
+										]
+									: prompt,
+							},
+						],
+						modalities: ["image", "text"],
+					}),
+				},
+			)
+
+			if (!response.ok) {
+				const errorText = await response.text()
+				let errorMessage = `Failed to generate image: ${response.status} ${response.statusText}`
+				try {
+					const errorJson = JSON.parse(errorText)
+					if (errorJson.error?.message) {
+						errorMessage = `Failed to generate image: ${errorJson.error.message}`
+					}
+				} catch {
+					// Use default error message
+				}
+				return {
+					success: false,
+					error: errorMessage,
+				}
+			}
+
+			const result: ImageGenerationResponse = await response.json()
+
+			if (result.error) {
+				return {
+					success: false,
+					error: `Failed to generate image: ${result.error.message}`,
+				}
+			}
+
+			// Extract the generated image from the response
+			const images = result.choices?.[0]?.message?.images
+			if (!images || images.length === 0) {
+				return {
+					success: false,
+					error: "No image was generated in the response",
+				}
+			}
+
+			const imageData = images[0]?.image_url?.url
+			if (!imageData) {
+				return {
+					success: false,
+					error: "Invalid image data in response",
+				}
+			}
+
+			// Extract base64 data from data URL
+			const base64Match = imageData.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/)
+			if (!base64Match) {
+				return {
+					success: false,
+					error: "Invalid image format received",
+				}
+			}
+
+			return {
+				success: true,
+				imageData: imageData,
+				imageFormat: base64Match[1],
+			}
+		} catch (error) {
+			return {
+				success: false,
+				error: error instanceof Error ? error.message : "Unknown error occurred",
+			}
+		}
 	}
 }
 

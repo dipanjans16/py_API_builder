@@ -16,6 +16,7 @@ import { CodeIndexManager } from "../services/code-index/manager"
 import { importSettingsWithFeedback } from "../core/config/importExport"
 import { MdmService } from "../services/mdm/MdmService"
 import { t } from "../i18n"
+import { generateTerminalCommand } from "../utils/terminalCommandGenerator" // kilocode_change
 
 /**
  * Helper to get the visible ClineProvider instance or log if not found.
@@ -74,16 +75,16 @@ export const registerCommands = (options: RegisterCommandOptions) => {
 
 const getCommandsMap = ({ context, outputChannel }: RegisterCommandOptions): Record<CommandId, any> => ({
 	activationCompleted: () => {},
-	accountButtonClicked: () => {
+	cloudButtonClicked: () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
 
 		if (!visibleProvider) {
 			return
 		}
 
-		TelemetryService.instance.captureTitleButtonClicked("account")
+		TelemetryService.instance.captureTitleButtonClicked("cloud")
 
-		visibleProvider.postMessageToWebview({ type: "action", action: "accountButtonClicked" })
+		visibleProvider.postMessageToWebview({ type: "action", action: "cloudButtonClicked" })
 	},
 	plusButtonClicked: async () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
@@ -95,8 +96,11 @@ const getCommandsMap = ({ context, outputChannel }: RegisterCommandOptions): Rec
 		TelemetryService.instance.captureTitleButtonClicked("plus")
 
 		await visibleProvider.removeClineFromStack()
-		await visibleProvider.postStateToWebview()
+		await visibleProvider.refreshWorkspace()
 		await visibleProvider.postMessageToWebview({ type: "action", action: "chatButtonClicked" })
+		// Send focusInput action immediately after chatButtonClicked
+		// This ensures the focus happens after the view has switched
+		await visibleProvider.postMessageToWebview({ type: "action", action: "focusInput" })
 	},
 	mcpButtonClicked: () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
@@ -242,6 +246,7 @@ const getCommandsMap = ({ context, outputChannel }: RegisterCommandOptions): Rec
 			outputChannel.appendLine(`Error in focusChatInput: ${error}`)
 		}
 	},
+	generateTerminalCommand: async () => await generateTerminalCommand({ outputChannel, context }), // kilocode_change
 	exportSettings: async () => {
 		const visibleProvider = getVisibleProviderOrLog(outputChannel)
 		if (!visibleProvider) return
@@ -250,6 +255,26 @@ const getCommandsMap = ({ context, outputChannel }: RegisterCommandOptions): Rec
 			providerSettingsManager: visibleProvider.providerSettingsManager,
 			contextProxy: visibleProvider.contextProxy,
 		})
+	},
+	// Handle external URI - used by JetBrains plugin to forward auth tokens
+	handleExternalUri: async (uriString: string) => {
+		const visibleProvider = getVisibleProviderOrLog(outputChannel)
+		if (!visibleProvider) {
+			return
+		}
+
+		try {
+			// Parse the URI string and create a VSCode URI object
+			const uri = vscode.Uri.parse(uriString)
+
+			// Import and use the existing handleUri function
+			const { handleUri } = await import("./handleUri")
+			await handleUri(uri)
+
+			outputChannel.appendLine(`Successfully handled external URI: ${uriString}`)
+		} catch (error) {
+			outputChannel.appendLine(`Error handling external URI: ${uriString}, error: ${error}`)
+		}
 	},
 	// kilocode_change end
 })
@@ -271,7 +296,7 @@ export const openClineInNewTab = async ({ context, outputChannel }: Omit<Registe
 		mdmService = undefined
 	}
 
-	const tabProvider = new ClineProvider(context, outputChannel, "editor", contextProxy, codeIndexManager, mdmService)
+	const tabProvider = new ClineProvider(context, outputChannel, "editor", contextProxy, mdmService)
 	const lastCol = Math.max(...vscode.window.visibleTextEditors.map((editor) => editor.viewColumn || 0))
 
 	// Check if there are any visible text editors, otherwise open a new group
@@ -294,8 +319,8 @@ export const openClineInNewTab = async ({ context, outputChannel }: Omit<Registe
 	setPanel(newPanel, "tab")
 
 	newPanel.iconPath = {
-		light: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo-light.svg"),
-		dark: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo-dark.svg"),
+		light: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo.png"),
+		dark: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "kilo-dark.png"),
 	}
 
 	await tabProvider.resolveWebviewView(newPanel)

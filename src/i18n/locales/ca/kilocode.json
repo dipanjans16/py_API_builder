@@ -11,7 +11,16 @@
 		"title": "Avís de Crèdit Baix!",
 		"message": "Comprova si pots recarregar amb crèdits gratuïts o comprar-ne més!"
 	},
-	"notLoggedInError": "No es pot completar la sol·licitud, assegura't que estàs connectat i has iniciat sessió amb el proveïdor seleccionat.\n\n{{error}}",
+	"task": {
+		"noAssistantMessages": "La resposta del model ha acabat de forma inesperada (cap missatge de l'assistent). Això pot ser un signe de limitació de freqüència.",
+		"notLoggedInError": "No es pot completar la sol·licitud, assegura't que estàs connectat i has iniciat sessió amb el proveïdor seleccionat.\n\n{{error}}",
+		"maxCompletionTokens": "S'ha arribat al nombre màxim de tokens de compleció."
+	},
+	"checkpoints": {
+		"nestedGitRepos": "Els punts de control no estan disponibles perquè s'han detectat repositoris Git imbricats a l'espai de treball. Si us plau, elimineu o reubiqueu els repositoris Git imbricats per utilitzar la funcionalitat de punts de control o desactiveu els punts de control a la configuració per suprimir aquest avís.",
+		"protectedPaths": "Els punts de control no estan disponibles a {{workspaceDir}}. Si us plau, obriu una subcarpeta com a espai de treball per utilitzar la funcionalitat de punts de control o desactiveu els punts de control a la configuració per suprimir aquest avís.",
+		"dismissWarning": "Descartar"
+	},
 	"rules": {
 		"actions": {
 			"delete": "Eliminar",
@@ -51,57 +60,78 @@
 		"providerRegistered": "Kilo: Proveïdor de missatges de «commit» registrat",
 		"activationFailed": "Kilo: No s'ha pogut activar el generador de missatges: {{error}}"
 	},
-	"autocomplete": {
+	"ghost": {
 		"statusBar": {
-			"warning": "$(warning) Kilo Autocompletat",
-			"enabled": "$(sparkle) Kilo Autocompletat",
+			"enabled": "$(sparkle) Kilo Code Autocomplete",
+			"disabled": "$(circle-slash) Kilo Code Autocomplete",
+			"warning": "$(warning) Kilo Code Autocomplete",
 			"tooltip": {
-				"basic": "Kilo Code Autocompletat",
-				"disabled": "Kilo Code Autocompletat (desactivat)",
-				"tokenError": "Cal establir un token vàlid per utilitzar l'autocompleció",
-				"lastCompletion": "Última compleció:",
+				"basic": "Kilo Code Autocomplete",
+				"disabled": "Kilo Code Autocomplete (desactivat)",
+				"tokenError": "S'ha d'establir un token vàlid per utilitzar Autocomplete",
+				"lastCompletion": "Últim suggeriment:",
 				"sessionTotal": "Cost total de la sessió:",
 				"model": "Model:"
 			},
-			"disabled": "$(circle-slash) Kilo Autocompletat",
 			"cost": {
-				"zero": "0,00 €",
-				"lessThanCent": "<0,01 €"
+				"zero": "$0.00",
+				"lessThanCent": "<$0.01"
 			}
 		},
-		"toggleMessage": "Kilo Autocompletat {{status}}"
-	},
-	"ghost": {
+		"toggleMessage": "Kilo Code Autocomplete {{status}}",
 		"progress": {
+			"title": "Kilo Code",
 			"analyzing": "Analitzant el teu codi...",
-			"generating": "Generant suggeriments d'edició...",
-			"processing": "Processant les edicions suggerides...",
-			"showing": "Mostrant edicions suggerides...",
-			"title": "Kilo Code"
+			"generating": "Generant edicions suggerides...",
+			"processing": "Processant edicions suggerides...",
+			"showing": "Mostrant edicions suggerides..."
 		},
 		"input": {
 			"title": "Kilo Code: Tasca Ràpida",
-			"placeholder": "p. ex., 'refactora aquesta funció perquè sigui més eficient'"
+			"placeholder": "p. ex., 'refactoritza aquesta funció per ser més eficient'"
 		},
 		"commands": {
-			"generateSuggestions": "Kilo Code: Genera suggeriments d'edició",
-			"displaySuggestions": "Mostrar Suggeriments d'Edició",
-			"cancelSuggestions": "Cancel·la les edicions suggerides",
-			"applyAllSuggestions": "Aplica totes les edicions suggerides",
-			"applyCurrentSuggestion": "Aplica l'edició suggerida actual",
-			"promptCodeSuggestion": "Petició de Tasca Ràpida",
+			"generateSuggestions": "Kilo Code: Generar Edicions Suggerides",
+			"displaySuggestions": "Mostrar Edicions Suggerides",
+			"cancelSuggestions": "Cancel·lar Edicions Suggerides",
+			"applyCurrentSuggestion": "Aplicar Edició Suggerida Actual",
+			"applyAllSuggestions": "Aplicar Totes les Edicions Suggerides",
+			"promptCodeSuggestion": "Tasca Ràpida",
 			"category": "Kilo Code"
 		},
 		"codeAction": {
-			"title": "Kilo Code: Edicions suggerides"
+			"title": "Kilo Code: Edicions Suggerides"
 		},
 		"chatParticipant": {
-			"name": "Agent",
 			"fullName": "Kilo Code Agent",
-			"description": "Et puc ajudar amb tasques ràpides i edicions suggerides."
+			"name": "Agent",
+			"description": "Puc ajudar-te amb tasques ràpides i edicions suggerides."
 		},
-		"messages": {
-			"provideCodeSuggestions": "S'estan proporcionant suggeriments de codi..."
+		"incompatibilityExtensionPopup": {
+			"message": "El Kilo Code Autocomplete està sent bloquejat per un conflicte amb GitHub Copilot. Per solucionar això, has de desactivar els suggeriments en línia de Copilot.",
+			"disableCopilot": "Desactivar Copilot",
+			"disableInlineAssist": "Desactivar Autocomplete"
 		}
+	},
+	"terminalCommandGenerator": {
+		"inputPrompt": "Kilo: Descriu l'ordre que vols generar",
+		"generatingProgress": "Kilo: Generant ordre de terminal...",
+		"noActiveTerminal": "Kilo: No s'ha trobat cap terminal actiu. Si us plau, obriu primer un terminal.",
+		"inputPlaceholder": "p. ex., matar el procés que s'executa al port 3001, trobar fitxers grans, etc.",
+		"commandGenerated": "Kilo: Ordre generada: {{command}}",
+		"generationFailed": "Kilo: Error en generar l'ordre: {{error}}",
+		"warningDialog": {
+			"title": "Advertència de Seguretat del Terminal",
+			"message": "Comproveu detingudament totes les comandes generades abans d'executar-les. Les accions al terminal no sempre es poden desfer — executar comandes sense verificar pot provocar la pèrdua irreversible de dades o danys al sistema. Reviseu i entengueu completament la comanda abans de continuar!",
+			"okButton": "Ho entenc",
+			"cancelButton": "Cancel·lar"
+		},
+		"tipMessage": "Kilo: Premeu {{shortcut}} per a generar ordres del terminal"
+	},
+	"seeNewChanges": {
+		"title": "Mostrant canvis nous",
+		"checkpointsUnavailable": "No es poden mostrar canvis nous, els punts de control no estan disponibles.",
+		"noChanges": "No es poden mostrar canvis nous, no s'han trobat canvis.",
+		"error": "No es poden mostrar canvis nous, s'ha produït un error."
 	}
 }

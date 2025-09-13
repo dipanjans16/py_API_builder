@@ -6,19 +6,26 @@ import { safeWriteJson } from "../../../utils/safeWriteJson"
 
 import { ContextProxy } from "../../../core/config/ContextProxy"
 import { getCacheDirectoryPath } from "../../../utils/storage"
-import { RouterName, ModelRecord, cerebrasModels } from "../../../shared/api"
+import { RouterName, ModelRecord } from "../../../shared/api"
 import { fileExistsAtPath } from "../../../utils/fs"
 
 import { getOpenRouterModels } from "./openrouter"
+import { getVercelAiGatewayModels } from "./vercel-ai-gateway"
 import { getRequestyModels } from "./requesty"
 import { getGlamaModels } from "./glama"
 import { getUnboundModels } from "./unbound"
 import { getLiteLLMModels } from "./litellm"
 import { GetModelsOptions } from "../../../shared/api"
-import { getKiloBaseUriFromToken } from "../../../utils/kilocode-token"
+import { getKiloBaseUriFromToken } from "../../../shared/kilocode/token"
 import { getOllamaModels } from "./ollama"
 import { getLMStudioModels } from "./lmstudio"
+import { getIOIntelligenceModels } from "./io-intelligence"
 
+// kilocode_change start
+import { cerebrasModels } from "@roo-code/types"
+// kilocode_change end
+
+import { getDeepInfraModels } from "./deepinfra"
 const memoryCache = new NodeCache({ stdTTL: 5 * 60, checkperiod: 5 * 60 })
 
 export /*kilocode_change*/ async function writeModels(router: RouterName, data: ModelRecord) {
@@ -48,12 +55,7 @@ export /*kilocode_change*/ async function readModels(router: RouterName): Promis
  */
 export const getModels = async (options: GetModelsOptions): Promise<ModelRecord> => {
 	const { provider } = options
-
-	// kilocode_change start: cacheKey
-	const cacheKey = JSON.stringify(options)
-	let models = memoryCache.get<ModelRecord>(cacheKey)
-	// kilocode_cache end
-
+	let models = getModelsFromCache(provider)
 	if (models) {
 		return models
 	}
@@ -70,7 +72,7 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
 				break
 			case "requesty":
 				// Requesty models endpoint requires an API key for per-user custom policies
-				models = await getRequestyModels(options.apiKey)
+				models = await getRequestyModels(options.baseUrl, options.apiKey)
 				break
 			case "glama":
 				models = await getGlamaModels()
@@ -86,19 +88,32 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
 			// kilocode_change start
 			case "kilocode-openrouter":
 				models = await getOpenRouterModels({
-					openRouterBaseUrl: getKiloBaseUriFromToken(options.kilocodeToken ?? "") + "/api/openrouter",
-					headers: { Authorization: `Bearer ${options.kilocodeToken}` },
+					openRouterBaseUrl:
+						getKiloBaseUriFromToken(options.kilocodeToken ?? "") +
+						(options.kilocodeOrganizationId
+							? `/api/organizations/${options.kilocodeOrganizationId}`
+							: "/api/openrouter"),
+					headers: options.kilocodeToken ? { Authorization: `Bearer ${options.kilocodeToken}` } : undefined,
 				})
 				break
+			// kilocode_change end
 			case "cerebras":
 				models = cerebrasModels
 				break
-			// kilocode_change end
 			case "ollama":
 				models = await getOllamaModels(options.baseUrl)
 				break
 			case "lmstudio":
 				models = await getLMStudioModels(options.baseUrl)
+				break
+			case "deepinfra":
+				models = await getDeepInfraModels(options.apiKey, options.baseUrl)
+				break
+			case "io-intelligence":
+				models = await getIOIntelligenceModels(options.apiKey)
+				break
+			case "vercel-ai-gateway":
+				models = await getVercelAiGatewayModels()
 				break
 			default: {
 				// Ensures router is exhaustively checked if RouterName is a strict union
@@ -108,7 +123,7 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
 		}
 
 		// Cache the fetched models (even if empty, to signify a successful fetch with no models)
-		memoryCache.set(cacheKey, models) // kilocode_change: cacheKey
+		memoryCache.set(provider, models)
 
 		/* kilocode_change: skip useless file IO
 		await writeModels(provider, models).catch((err) =>
@@ -137,4 +152,8 @@ export const getModels = async (options: GetModelsOptions): Promise<ModelRecord>
  */
 export const flushModels = async (router: RouterName) => {
 	memoryCache.del(router)
+}
+
+export function getModelsFromCache(provider: string) {
+	return memoryCache.get<ModelRecord>(provider)
 }

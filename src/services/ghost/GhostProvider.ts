@@ -1,19 +1,25 @@
+import crypto from "crypto"
 import * as vscode from "vscode"
+import { t } from "../../i18n"
 import { GhostDocumentStore } from "./GhostDocumentStore"
 import { GhostStrategy } from "./GhostStrategy"
 import { GhostModel } from "./GhostModel"
 import { GhostWorkspaceEdit } from "./GhostWorkspaceEdit"
 import { GhostDecorations } from "./GhostDecorations"
 import { GhostSuggestionContext } from "./types"
-import { t } from "../../i18n"
-import { addCustomInstructions } from "../../core/prompts/sections/custom-instructions"
+import { GhostStatusBar } from "./GhostStatusBar"
 import { getWorkspacePath } from "../../utils/path"
 import { GhostSuggestionsState } from "./GhostSuggestions"
 import { GhostCodeActionProvider } from "./GhostCodeActionProvider"
 import { GhostCodeLensProvider } from "./GhostCodeLensProvider"
-import { GhostServiceSettings } from "@roo-code/types"
+import { GhostServiceSettings, TelemetryEventName } from "@roo-code/types"
 import { ContextProxy } from "../../core/config/ContextProxy"
 import { ProviderSettingsManager } from "../../core/config/ProviderSettingsManager"
+import { GhostContext } from "./GhostContext"
+import { TelemetryService } from "@roo-code/telemetry"
+import { ClineProvider } from "../../core/webview/ClineProvider"
+import { GhostCursorAnimation } from "./GhostCursorAnimation"
+import { GhostCursor } from "./GhostCursor"
 
 export class GhostProvider {
 	private static instance: GhostProvider | null = null
@@ -24,54 +30,178 @@ export class GhostProvider {
 	private workspaceEdit: GhostWorkspaceEdit
 	private suggestions: GhostSuggestionsState = new GhostSuggestionsState()
 	private context: vscode.ExtensionContext
+	private cline: ClineProvider
 	private providerSettingsManager: ProviderSettingsManager
 	private settings: GhostServiceSettings | null = null
+	private ghostContext: GhostContext
+	private cursor: GhostCursor
+	private cursorAnimation: GhostCursorAnimation
+
+	private enabled: boolean = true
+	private taskId: string | null = null
+	private isProcessing: boolean = false
+	private isRequestCancelled: boolean = false
+
+	// Status bar integration
+	private statusBar: GhostStatusBar | null = null
+	private sessionCost: number = 0
+	private lastCompletionCost: number = 0
+
+	// Auto-trigger timer management
+	private autoTriggerTimer: NodeJS.Timeout | null = null
+	private lastTextChangeTime: number = 0
 
 	// VSCode Providers
 	public codeActionProvider: GhostCodeActionProvider
 	public codeLensProvider: GhostCodeLensProvider
 
-	private constructor(context: vscode.ExtensionContext) {
+	private constructor(context: vscode.ExtensionContext, cline: ClineProvider) {
 		this.context = context
+		this.cline = cline
+
+		// Register Internal Components
 		this.decorations = new GhostDecorations()
 		this.documentStore = new GhostDocumentStore()
-		this.strategy = new GhostStrategy()
+		this.strategy = new GhostStrategy({ debug: true })
 		this.workspaceEdit = new GhostWorkspaceEdit()
 		this.providerSettingsManager = new ProviderSettingsManager(context)
 		this.model = new GhostModel()
+		this.ghostContext = new GhostContext(this.documentStore)
+		this.cursor = new GhostCursor()
+		this.cursorAnimation = new GhostCursorAnimation(context)
 
 		// Register the providers
 		this.codeActionProvider = new GhostCodeActionProvider()
 		this.codeLensProvider = new GhostCodeLensProvider()
 
-		void this.reload()
+		// Register document event handlers
+		vscode.workspace.onDidChangeTextDocument(this.onDidChangeTextDocument, this, context.subscriptions)
+		vscode.workspace.onDidOpenTextDocument(this.onDidOpenTextDocument, this, context.subscriptions)
+		vscode.workspace.onDidCloseTextDocument(this.onDidCloseTextDocument, this, context.subscriptions)
+		vscode.window.onDidChangeTextEditorSelection(this.onDidChangeTextEditorSelection, this, context.subscriptions)
+		vscode.window.onDidChangeActiveTextEditor(this.onDidChangeActiveTextEditor, this, context.subscriptions)
+
+		void this.load()
 	}
 
-	private loadSettings() {
-		return ContextProxy.instance?.getValues?.()?.ghostServiceSettings
+	// Singleton Management
+	public static initialize(context: vscode.ExtensionContext, cline: ClineProvider): GhostProvider {
+		if (GhostProvider.instance) {
+			throw new Error("GhostProvider is already initialized. Use getInstance() instead.")
+		}
+		GhostProvider.instance = new GhostProvider(context, cline)
+		return GhostProvider.instance
 	}
 
-	public async reload() {
-		this.settings = this.loadSettings()
-		await this.model.reload(this.settings, this.providerSettingsManager)
-		await this.updateGlobalContext()
-	}
-
-	public static getInstance(context?: vscode.ExtensionContext): GhostProvider {
+	public static getInstance(): GhostProvider {
 		if (!GhostProvider.instance) {
-			if (!context) {
-				throw new Error("ExtensionContext is required for first initialization of GhostProvider")
-			}
-			GhostProvider.instance = new GhostProvider(context)
+			throw new Error("GhostProvider is not initialized. Call initialize() first.")
 		}
 		return GhostProvider.instance
 	}
 
-	public getDocumentStore() {
-		return this.documentStore
+	// Settings Management
+	private loadSettings() {
+		const state = ContextProxy.instance?.getValues?.()
+		return state.ghostServiceSettings
+	}
+
+	private async saveSettings() {
+		if (!this.settings) {
+			return
+		}
+		await ContextProxy.instance?.setValues?.({ ghostServiceSettings: this.settings })
+		await this.cline.postStateToWebview
+	}
+
+	public async load() {
+		this.settings = this.loadSettings()
+		await this.model.reload(this.settings, this.providerSettingsManager)
+		await this.updateGlobalContext()
+		this.updateStatusBar()
+	}
+
+	public async disable() {
+		this.settings = {
+			...this.settings,
+			enableAutoTrigger: false,
+			enableSmartInlineTaskKeybinding: false,
+			enableQuickInlineTaskKeybinding: false,
+		}
+		await this.saveSettings()
+		await this.load()
+	}
+
+	public async enable() {
+		this.settings = {
+			...this.settings,
+			enableAutoTrigger: true,
+			enableSmartInlineTaskKeybinding: true,
+			enableQuickInlineTaskKeybinding: true,
+		}
+		await this.saveSettings()
+		await this.load()
+	}
+
+	// VsCode Event Handlers
+	private onDidCloseTextDocument(document: vscode.TextDocument): void {
+		if (!this.enabled || document.uri.scheme !== "file") {
+			return
+		}
+		this.documentStore.removeDocument(document.uri)
+	}
+
+	private async onDidOpenTextDocument(document: vscode.TextDocument): Promise<void> {
+		if (!this.enabled || document.uri.scheme !== "file") {
+			return
+		}
+		await this.documentStore.storeDocument({
+			document,
+		})
+	}
+
+	private async onDidChangeTextDocument(event: vscode.TextDocumentChangeEvent): Promise<void> {
+		if (!this.enabled || event.document.uri.scheme !== "file") {
+			return
+		}
+		if (this.workspaceEdit.isLocked()) {
+			return
+		}
+		await this.documentStore.storeDocument({ document: event.document })
+		this.lastTextChangeTime = Date.now()
+		this.handleTypingEvent(event)
+	}
+
+	private async onDidChangeTextEditorSelection(event: vscode.TextEditorSelectionChangeEvent): Promise<void> {
+		if (!this.enabled) {
+			return
+		}
+		this.cursorAnimation.update()
+		const timeSinceLastTextChange = Date.now() - this.lastTextChangeTime
+		const isSelectionChangeFromTyping = timeSinceLastTextChange < 50
+		if (!isSelectionChangeFromTyping) {
+			this.clearAutoTriggerTimer()
+		}
+	}
+
+	private async onDidChangeActiveTextEditor(editor: vscode.TextEditor | undefined) {
+		if (!this.enabled || !editor) {
+			return
+		}
+		this.clearAutoTriggerTimer()
+		await this.render()
 	}
 
 	public async promptCodeSuggestion() {
+		if (!this.enabled) {
+			return
+		}
+
+		this.taskId = crypto.randomUUID()
+		TelemetryService.instance.captureEvent(TelemetryEventName.INLINE_ASSIST_QUICK_TASK, {
+			taskId: this.taskId,
+		})
+
 		const userInput = await vscode.window.showInputBox({
 			prompt: t("kilocode:ghost.input.title"),
 			placeHolder: t("kilocode:ghost.input.placeholder"),
@@ -84,127 +214,187 @@ export class GhostProvider {
 		if (!editor) {
 			return
 		}
+
 		const document = editor.document
 		const range = editor.selection.isEmpty ? undefined : editor.selection
-
 		await this.provideCodeSuggestions({ document, range, userInput })
 	}
 
 	public async codeSuggestion() {
+		if (!this.enabled) {
+			return
+		}
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
 			return
 		}
+
+		this.taskId = crypto.randomUUID()
+		TelemetryService.instance.captureEvent(TelemetryEventName.INLINE_ASSIST_AUTO_TASK, {
+			taskId: this.taskId,
+		})
+
 		const document = editor.document
 		const range = editor.selection.isEmpty ? undefined : editor.selection
 
 		await this.provideCodeSuggestions({ document, range })
 	}
 
-	public async provideCodeActionQuickFix(
-		document: vscode.TextDocument,
-		range: vscode.Range | vscode.Selection,
-	): Promise<void> {
-		// Store the document in the document store
-		this.getDocumentStore().storeDocument(document)
-		await this.provideCodeSuggestions({ document, range })
-	}
-
-	private async enhanceContext(context: GhostSuggestionContext): Promise<GhostSuggestionContext> {
-		const editor = vscode.window.activeTextEditor
-		if (!editor) {
-			return context
-		}
-		// Add open files to the context
-		const openFiles = vscode.workspace.textDocuments.filter((doc) => doc.uri.scheme === "file")
-		return { ...context, openFiles }
-	}
-
-	private async provideCodeSuggestions(context: GhostSuggestionContext): Promise<void> {
+	private async provideCodeSuggestions(initialContext: GhostSuggestionContext): Promise<void> {
 		// Cancel any ongoing suggestions
 		await this.cancelSuggestions()
+		this.startRequesting()
+		this.isRequestCancelled = false
 
-		let cancelled = false
-		const enhancedContext = await this.enhanceContext(context)
+		const context = await this.ghostContext.generate(initialContext)
+		const systemPrompt = this.strategy.getSystemPrompt(context)
+		const userPrompt = this.strategy.getSuggestionPrompt(context)
+		if (this.isRequestCancelled) {
+			return
+		}
 
-		await vscode.window.withProgress(
-			{
-				location: vscode.ProgressLocation.Notification,
-				title: t("kilocode:ghost.progress.title"),
-				cancellable: true,
-			},
-			async (progress, progressToken) => {
-				progressToken.onCancellationRequested(() => {
-					cancelled = true
-				})
+		if (!this.model.loaded) {
+			this.stopProcessing()
+			await this.load()
+		}
 
-				progress.report({ message: t("kilocode:ghost.progress.analyzing") })
+		console.log("system", systemPrompt)
+		console.log("userprompt", userPrompt)
 
-				// Load custom instructions
-				const workspacePath = getWorkspacePath()
-				const customInstructions = await addCustomInstructions("", "", workspacePath, "ghost")
+		// Initialize the streaming parser
+		this.strategy.initializeStreamingParser(context)
 
-				const systemPrompt = this.strategy.getSystemPrompt(customInstructions)
-				const userPrompt = this.strategy.getSuggestionPrompt(enhancedContext)
-				if (cancelled) {
-					return
+		let hasShownFirstSuggestion = false
+		let cost = 0
+		let inputTokens = 0
+		let outputTokens = 0
+		let cacheWriteTokens = 0
+		let cacheReadTokens = 0
+		let response = ""
+
+		// Create streaming callback
+		const onChunk = (chunk: any) => {
+			if (this.isRequestCancelled) {
+				return
+			}
+
+			if (chunk.type === "text") {
+				response += chunk.text
+
+				// Process the text chunk through our streaming parser
+				const parseResult = this.strategy.processStreamingChunk(chunk.text)
+
+				if (parseResult.hasNewSuggestions) {
+					// Update our suggestions with the new parsed results
+					this.suggestions = parseResult.suggestions
+
+					// If this is the first suggestion, show it immediately
+					if (!hasShownFirstSuggestion && this.suggestions.hasSuggestions()) {
+						hasShownFirstSuggestion = true
+						this.stopProcessing() // Stop the loading animation
+						this.selectClosestSuggestion()
+						void this.render() // Render asynchronously to not block streaming
+					} else if (hasShownFirstSuggestion) {
+						// Update existing suggestions
+						this.selectClosestSuggestion()
+						void this.render() // Update UI asynchronously
+					}
 				}
 
-				progress.report({ message: t("kilocode:ghost.progress.generating") })
-				if (!this.model.loaded) {
-					await this.reload()
+				// If the response appears complete, finalize
+				if (parseResult.isComplete && hasShownFirstSuggestion) {
+					this.selectClosestSuggestion()
+					void this.render()
 				}
-				const response = await this.model.generateResponse(systemPrompt, userPrompt)
-				console.log("Ghost response:", response)
-				if (cancelled) {
-					return
-				}
+			}
+		}
 
-				// First parse the response into edit operations
-				progress.report({ message: t("kilocode:ghost.progress.processing") })
-				this.suggestions = await this.strategy.parseResponse(response, enhancedContext)
+		try {
+			// Start streaming generation
+			const usageInfo = await this.model.generateResponse(systemPrompt, userPrompt, onChunk)
 
-				if (cancelled) {
-					this.suggestions.clear()
-					await this.render()
-					return
-				}
-				// Generate placeholder for show the suggestions
-				progress.report({ message: t("kilocode:ghost.progress.showing") })
-				await this.workspaceEdit.applySuggestionsPlaceholders(this.suggestions)
+			console.log("response", response)
+
+			// Update cost tracking
+			cost = usageInfo.cost
+			inputTokens = usageInfo.inputTokens
+			outputTokens = usageInfo.outputTokens
+			cacheWriteTokens = usageInfo.cacheWriteTokens
+			cacheReadTokens = usageInfo.cacheReadTokens
+
+			this.updateCostTracking(cost)
+
+			// Send telemetry
+			TelemetryService.instance.captureEvent(TelemetryEventName.LLM_COMPLETION, {
+				taskId: this.taskId,
+				inputTokens: inputTokens,
+				outputTokens: outputTokens,
+				cacheWriteTokens: cacheWriteTokens,
+				cacheReadTokens: cacheReadTokens,
+				cost: cost,
+				service: "INLINE_ASSIST",
+			})
+
+			if (this.isRequestCancelled) {
+				this.suggestions.clear()
 				await this.render()
-			},
-		)
+				return
+			}
+
+			// Finish the streaming parser to apply sanitization if needed
+			const finalParseResult = this.strategy.finishStreamingParser()
+			if (finalParseResult.hasNewSuggestions && !hasShownFirstSuggestion) {
+				// Handle case where sanitization produced suggestions
+				this.suggestions = finalParseResult.suggestions
+				hasShownFirstSuggestion = true
+				this.stopProcessing()
+				this.selectClosestSuggestion()
+				await this.render()
+			} else if (finalParseResult.hasNewSuggestions && hasShownFirstSuggestion) {
+				// Update existing suggestions with sanitized results
+				this.suggestions = finalParseResult.suggestions
+				this.selectClosestSuggestion()
+				await this.render()
+			}
+
+			// If we never showed any suggestions, there might have been an issue
+			if (!hasShownFirstSuggestion) {
+				console.warn("No suggestions were generated during streaming")
+				this.stopProcessing()
+			}
+
+			// Final render to ensure everything is up to date
+			this.selectClosestSuggestion()
+			await this.render()
+		} catch (error) {
+			console.error("Error in streaming generation:", error)
+			this.stopProcessing()
+			throw error
+		}
 	}
 
 	private async render() {
 		await this.updateGlobalContext()
 		await this.displaySuggestions()
-		await this.displayCodeLens()
-		await this.moveCursorToSuggestion()
+		// await this.displayCodeLens()
 	}
 
-	public async onDidChangeActiveTextEditor(editor: vscode.TextEditor | undefined) {
-		if (!editor) {
-			return
-		}
-		await this.render()
-	}
-
-	private async moveCursorToSuggestion() {
-		const topLine = this.getSelectedSuggestionLine()
-		if (topLine === null) {
-			return
-		}
+	private selectClosestSuggestion() {
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
 			return
 		}
-		editor.selection = new vscode.Selection(topLine, 0, topLine, 0)
-		editor.revealRange(new vscode.Range(topLine, 0, topLine, 0), vscode.TextEditorRevealType.InCenter)
+		const file = this.suggestions.getFile(editor.document.uri)
+		if (!file) {
+			return
+		}
+		file.selectClosestGroup(editor.selection)
 	}
 
 	public async displaySuggestions() {
+		if (!this.enabled) {
+			return
+		}
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
 			return
@@ -245,6 +435,7 @@ export class GhostProvider {
 	private async updateGlobalContext() {
 		const hasSuggestions = this.suggestions.hasSuggestions()
 		await vscode.commands.executeCommand("setContext", "kilocode.ghost.hasSuggestions", hasSuggestions)
+		await vscode.commands.executeCommand("setContext", "kilocode.ghost.isProcessing", this.isProcessing)
 		await vscode.commands.executeCommand(
 			"setContext",
 			"kilocode.ghost.enableQuickInlineTaskKeybinding",
@@ -252,12 +443,15 @@ export class GhostProvider {
 		)
 		await vscode.commands.executeCommand(
 			"setContext",
-			"kilocode.ghost.enableAutoInlineTaskKeybinding",
-			this.settings?.enableAutoInlineTaskKeybinding || false,
+			"kilocode.ghost.enableSmartInlineTaskKeybinding",
+			this.settings?.enableSmartInlineTaskKeybinding || false,
 		)
 	}
 
 	public hasPendingSuggestions(): boolean {
+		if (!this.enabled) {
+			return false
+		}
 		return this.suggestions.hasSuggestions()
 	}
 
@@ -265,62 +459,83 @@ export class GhostProvider {
 		if (!this.hasPendingSuggestions() || this.workspaceEdit.isLocked()) {
 			return
 		}
+		TelemetryService.instance.captureEvent(TelemetryEventName.INLINE_ASSIST_REJECT_SUGGESTION, {
+			taskId: this.taskId,
+		})
 		this.decorations.clearAll()
-		await this.workspaceEdit.revertSuggestionsPlaceholder(this.suggestions)
 		this.suggestions.clear()
+
+		this.clearAutoTriggerTimer()
 		await this.render()
 	}
 
 	public async applySelectedSuggestions() {
+		if (!this.enabled) {
+			return
+		}
 		if (!this.hasPendingSuggestions() || this.workspaceEdit.isLocked()) {
 			return
 		}
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
-			console.log("No active editor found, returning")
+			await this.cancelSuggestions()
 			return
 		}
 		const suggestionsFile = this.suggestions.getFile(editor.document.uri)
 		if (!suggestionsFile) {
-			console.log(`No suggestions found for document: ${editor.document.uri.toString()}`)
+			await this.cancelSuggestions()
 			return
 		}
 		if (suggestionsFile.getSelectedGroup() === null) {
-			console.log("No group selected, returning")
+			await this.cancelSuggestions()
 			return
 		}
+		TelemetryService.instance.captureEvent(TelemetryEventName.INLINE_ASSIST_ACCEPT_SUGGESTION, {
+			taskId: this.taskId,
+		})
 		this.decorations.clearAll()
-		await this.workspaceEdit.revertSuggestionsPlaceholder(this.suggestions)
 		await this.workspaceEdit.applySelectedSuggestions(this.suggestions)
+		this.cursor.moveToAppliedGroup(this.suggestions)
 		suggestionsFile.deleteSelectedGroup()
+		suggestionsFile.selectClosestGroup(editor.selection)
 		this.suggestions.validateFiles()
-		await this.workspaceEdit.applySuggestionsPlaceholders(this.suggestions)
+		this.clearAutoTriggerTimer()
 		await this.render()
 	}
 
 	public async applyAllSuggestions() {
+		if (!this.enabled) {
+			return
+		}
 		if (!this.hasPendingSuggestions() || this.workspaceEdit.isLocked()) {
 			return
 		}
+		TelemetryService.instance.captureEvent(TelemetryEventName.INLINE_ASSIST_ACCEPT_SUGGESTION, {
+			taskId: this.taskId,
+		})
 		this.decorations.clearAll()
-		await this.workspaceEdit.revertSuggestionsPlaceholder(this.suggestions)
 		await this.workspaceEdit.applySuggestions(this.suggestions)
 		this.suggestions.clear()
+
+		this.clearAutoTriggerTimer()
 		await this.render()
 	}
 
 	public async selectNextSuggestion() {
+		if (!this.enabled) {
+			return
+		}
 		if (!this.hasPendingSuggestions()) {
 			return
 		}
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
-			console.log("No active editor found, returning")
+			await this.cancelSuggestions()
 			return
 		}
 		const suggestionsFile = this.suggestions.getFile(editor.document.uri)
 		if (!suggestionsFile) {
-			console.log(`No suggestions found for document: ${editor.document.uri.toString()}`)
+			await this.cancelSuggestions()
 			return
 		}
 		suggestionsFile.selectNextGroup()
@@ -328,20 +543,178 @@ export class GhostProvider {
 	}
 
 	public async selectPreviousSuggestion() {
+		if (!this.enabled) {
+			return
+		}
 		if (!this.hasPendingSuggestions()) {
 			return
 		}
 		const editor = vscode.window.activeTextEditor
 		if (!editor) {
-			console.log("No active editor found, returning")
+			await this.cancelSuggestions()
 			return
 		}
 		const suggestionsFile = this.suggestions.getFile(editor.document.uri)
 		if (!suggestionsFile) {
-			console.log(`No suggestions found for document: ${editor.document.uri.toString()}`)
+			await this.cancelSuggestions()
 			return
 		}
 		suggestionsFile.selectPreviousGroup()
 		await this.render()
+	}
+
+	private initializeStatusBar() {
+		if (!this.enabled) {
+			return
+		}
+		this.statusBar = new GhostStatusBar({
+			enabled: false,
+			model: "loading...",
+			hasValidToken: false,
+			totalSessionCost: 0,
+			lastCompletionCost: 0,
+		})
+	}
+
+	private getCurrentModelName(): string {
+		if (!this.model.loaded) {
+			return "loading..."
+		}
+		return this.model.getModelName() ?? "unknown"
+	}
+
+	private hasValidApiToken(): boolean {
+		return this.model.loaded && this.model.hasValidCredentials()
+	}
+
+	private updateCostTracking(cost: number) {
+		this.lastCompletionCost = cost
+		this.sessionCost += cost
+		this.updateStatusBar()
+	}
+
+	private updateStatusBar() {
+		if (!this.statusBar) {
+			this.initializeStatusBar()
+		}
+
+		this.statusBar?.update({
+			enabled: true,
+			model: this.getCurrentModelName(),
+			hasValidToken: this.hasValidApiToken(),
+			totalSessionCost: this.sessionCost,
+			lastCompletionCost: this.lastCompletionCost,
+		})
+	}
+
+	private disposeStatusBar() {
+		this.statusBar?.dispose()
+		this.statusBar = null
+	}
+
+	public async showIncompatibilityExtensionPopup() {
+		const message = t("kilocode:ghost.incompatibilityExtensionPopup.message")
+		const disableCopilot = t("kilocode:ghost.incompatibilityExtensionPopup.disableCopilot")
+		const disableInlineAssist = t("kilocode:ghost.incompatibilityExtensionPopup.disableInlineAssist")
+		const response = await vscode.window.showErrorMessage(message, disableCopilot, disableInlineAssist)
+
+		if (response === disableCopilot) {
+			await vscode.commands.executeCommand<any>("github.copilot.completions.disable")
+		} else if (response === disableInlineAssist) {
+			await vscode.commands.executeCommand<any>("kilo-code.ghost.disable")
+		}
+	}
+
+	private startRequesting() {
+		this.cursorAnimation.active()
+		this.isProcessing = true
+		this.updateGlobalContext()
+	}
+
+	private startProcessing() {
+		this.cursorAnimation.wait()
+		this.isProcessing = true
+		this.updateGlobalContext()
+	}
+
+	private stopProcessing() {
+		this.cursorAnimation.hide()
+		this.isProcessing = false
+		this.updateGlobalContext()
+	}
+
+	public cancelRequest() {
+		this.stopProcessing()
+		this.isRequestCancelled = true
+		if (this.autoTriggerTimer) {
+			this.clearAutoTriggerTimer()
+		}
+		// Reset streaming parser when cancelling
+		this.strategy.resetStreamingParser()
+	}
+
+	/**
+	 * Handle typing events for auto-trigger functionality
+	 */
+	private handleTypingEvent(event: vscode.TextDocumentChangeEvent): void {
+		// Cancel existing suggestions when user starts typing
+		if (this.hasPendingSuggestions()) {
+			void this.cancelSuggestions()
+			return
+		}
+
+		// Skip if auto-trigger is not enabled
+		if (!this.isAutoTriggerEnabled()) {
+			return
+		}
+
+		// Clear any existing timer
+		this.clearAutoTriggerTimer()
+		this.startProcessing()
+		// Start a new timer
+		const delay = (this.settings?.autoTriggerDelay || 3) * 1000
+		this.autoTriggerTimer = setTimeout(() => {
+			this.onAutoTriggerTimeout()
+		}, delay)
+	}
+
+	/**
+	 * Clear the auto-trigger timer
+	 */
+	private clearAutoTriggerTimer(): void {
+		this.stopProcessing()
+		if (this.autoTriggerTimer) {
+			clearTimeout(this.autoTriggerTimer)
+			this.autoTriggerTimer = null
+		}
+	}
+
+	/**
+	 * Check if auto-trigger is enabled in settings
+	 */
+	private isAutoTriggerEnabled(): boolean {
+		return this.settings?.enableAutoTrigger === true
+	}
+
+	/**
+	 * Handle auto-trigger timeout - triggers code suggestion automatically
+	 */
+	private async onAutoTriggerTimeout(): Promise<void> {
+		// Reset typing state
+		this.autoTriggerTimer = null
+
+		// Double-check that we should still trigger
+		if (!this.enabled || !this.isAutoTriggerEnabled() || this.hasPendingSuggestions()) {
+			return
+		}
+
+		// Get the active editor
+		const editor = vscode.window.activeTextEditor
+		if (!editor) {
+			return
+		}
+
+		// Trigger code suggestion automatically
+		await this.codeSuggestion()
 	}
 }

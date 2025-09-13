@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { SelectDropdown, DropdownOptionType } from "@/components/ui"
-import type { ProviderSettings } from "@roo-code/types"
+import { OPENROUTER_DEFAULT_PROVIDER_NAME, type ProviderSettings } from "@roo-code/types"
 import { vscode } from "@src/utils/vscode"
 import { useAppTranslation } from "@src/i18n/TranslationContext"
 import { cn } from "@src/lib/utils"
@@ -26,20 +26,23 @@ export const ModelSelector = ({ currentApiConfigName, apiConfiguration, fallback
 	const modelIdKey = getModelIdKey({ provider })
 
 	const modelsIds = usePreferredModels(providerModels)
-	const options = useMemo(
-		() =>
-			modelsIds.map((modelId) => ({
-				value: modelId,
-				label: prettyModelName(modelId),
-				type: DropdownOptionType.ITEM,
-			})),
-		[modelsIds],
-	)
+	const options = useMemo(() => {
+		const missingModelIds = modelsIds.indexOf(selectedModelId) >= 0 ? [] : [selectedModelId]
+		return missingModelIds.concat(modelsIds).map((modelId) => ({
+			value: modelId,
+			label: providerModels[modelId]?.displayName ?? prettyModelName(modelId),
+			type: DropdownOptionType.ITEM,
+		}))
+	}, [modelsIds, providerModels, selectedModelId])
 
 	const disabled = isLoading || isError
 
 	const onChange = (value: string) => {
 		if (!currentApiConfigName) {
+			return
+		}
+		if (apiConfiguration[modelIdKey] === value) {
+			// don't reset openRouterSpecificProvider
 			return
 		}
 		vscode.postMessage({
@@ -48,6 +51,7 @@ export const ModelSelector = ({ currentApiConfigName, apiConfiguration, fallback
 			apiConfiguration: {
 				...apiConfiguration,
 				[modelIdKey]: value,
+				openRouterSpecificProvider: OPENROUTER_DEFAULT_PROVIDER_NAME,
 			},
 		})
 	}

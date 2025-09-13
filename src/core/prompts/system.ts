@@ -1,7 +1,15 @@
 import * as vscode from "vscode"
 import * as os from "os"
 
-import type { ModeConfig, PromptComponent, CustomModePrompts, TodoItem } from "@roo-code/types"
+import type {
+	ModeConfig,
+	PromptComponent,
+	CustomModePrompts,
+	TodoItem,
+	Experiments, // kilocode_change
+} from "@roo-code/types"
+
+import type { SystemPromptSettings } from "./types"
 
 import { Mode, modes, defaultModeSlug, getModeBySlug, getGroupName, getModeSelection } from "../../shared/modes"
 import { DiffStrategy } from "../../shared/tools"
@@ -26,6 +34,7 @@ import {
 	addCustomInstructions,
 	markdownFormattingSection,
 } from "./sections"
+import { type ClineProviderState } from "../webview/ClineProvider" // kilocode_change
 
 // Helper function to get prompt component, filtering out empty objects
 export function getPromptComponent(
@@ -57,8 +66,10 @@ async function generatePrompt(
 	language?: string,
 	rooIgnoreInstructions?: string,
 	partialReadsEnabled?: boolean,
-	settings?: Record<string, any>,
+	settings?: SystemPromptSettings,
 	todoList?: TodoItem[],
+	modelId?: string,
+	clineProviderState?: ClineProviderState, // kilocode_change
 ): Promise<string> {
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
@@ -71,14 +82,19 @@ async function generatePrompt(
 	const modeConfig = getModeBySlug(mode, customModeConfigs) || modes.find((m) => m.slug === mode) || modes[0]
 	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, customModeConfigs)
 
+	// Check if MCP functionality should be included
+	const hasMcpGroup = modeConfig.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
+	const hasMcpServers = mcpHub && mcpHub.getServers().length > 0
+	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
+
 	const [modesSection, mcpServersSection] = await Promise.all([
 		getModesSection(context),
-		modeConfig.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
+		shouldIncludeMcp
 			? getMcpServersSection(mcpHub, effectiveDiffStrategy, enableMcpServerCreation)
 			: Promise.resolve(""),
 	])
 
-	const codeIndexManager = CodeIndexManager.getInstance(context)
+	const codeIndexManager = CodeIndexManager.getInstance(context, cwd)
 
 	const basePrompt = `${roleDefinition}
 
@@ -93,22 +109,25 @@ ${getToolDescriptionsForMode(
 	codeIndexManager,
 	effectiveDiffStrategy,
 	browserViewportSize,
-	mcpHub,
+	shouldIncludeMcp ? mcpHub : undefined,
 	customModeConfigs,
 	experiments,
 	partialReadsEnabled,
 	settings,
+	enableMcpServerCreation,
+	modelId,
+	clineProviderState, // kilocode_change
 )}
 
 ${getToolUseGuidelinesSection(codeIndexManager)}
 
 ${mcpServersSection}
 
-${getCapabilitiesSection(cwd, supportsComputerUse, mcpHub, effectiveDiffStrategy, codeIndexManager)}
+${getCapabilitiesSection(cwd, supportsComputerUse, shouldIncludeMcp ? mcpHub : undefined, effectiveDiffStrategy, codeIndexManager, clineProviderState /* kilocode_change */)}
 
 ${modesSection}
 
-${getRulesSection(cwd, supportsComputerUse, effectiveDiffStrategy, codeIndexManager)}
+${getRulesSection(cwd, supportsComputerUse, effectiveDiffStrategy, codeIndexManager, clineProviderState /* kilocode_change */)}
 
 ${getSystemInfoSection(cwd)}
 
@@ -137,13 +156,15 @@ export const SYSTEM_PROMPT = async (
 	customModes?: ModeConfig[],
 	globalCustomInstructions?: string,
 	diffEnabled?: boolean,
-	experiments?: Record<string, boolean>,
+	experiments?: Experiments, // kilocode_change: type
 	enableMcpServerCreation?: boolean,
 	language?: string,
 	rooIgnoreInstructions?: string,
 	partialReadsEnabled?: boolean,
-	settings?: Record<string, any>,
+	settings?: SystemPromptSettings,
 	todoList?: TodoItem[],
+	modelId?: string,
+	clineProviderState?: ClineProviderState, // kilocode_change
 ): Promise<string> => {
 	if (!context) {
 		throw new Error("Extension context is required for generating system prompt")
@@ -181,7 +202,11 @@ export const SYSTEM_PROMPT = async (
 			globalCustomInstructions || "",
 			cwd,
 			mode,
-			{ language: language ?? formatLanguage(vscode.env.language), rooIgnoreInstructions, settings },
+			{
+				language: language ?? formatLanguage(vscode.env.language),
+				rooIgnoreInstructions,
+				settings,
+			},
 		)
 
 		// For file-based prompts, don't include the tool sections
@@ -214,5 +239,7 @@ ${customInstructions}`
 		partialReadsEnabled,
 		settings,
 		todoList,
+		modelId,
+		clineProviderState, // kilocode_change
 	)
 }

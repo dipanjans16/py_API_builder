@@ -45,14 +45,20 @@
 		"enableDescription": "Увімкнути індексацію коду для покращеного пошуку та розуміння контексту",
 		"settingsTitle": "Налаштування індексації",
 		"disabledMessage": "Індексація кодової бази наразі вимкнена. Увімкніть її в глобальних налаштуваннях для конфігурації параметрів індексації.",
-		"providerLabel": "Постачальник вбудовувань",
+		"profileLabel": "Постачальник вбудовувань",
 		"embedderProviderLabel": "Постачальник вбудовувань",
-		"selectProviderPlaceholder": "Виберіть постачальника",
+		"selectProfilePlaceholder": "Виберіть постачальника",
 		"openaiProvider": "OpenAI",
 		"ollamaProvider": "Ollama",
 		"geminiProvider": "Gemini",
 		"geminiApiKeyLabel": "Ключ API:",
 		"geminiApiKeyPlaceholder": "Введіть ваш ключ API Gemini",
+		"mistralProvider": "Mistral",
+		"mistralApiKeyLabel": "Ключ API:",
+		"mistralApiKeyPlaceholder": "Введіть ваш ключ API Mistral",
+		"vercelAiGatewayProvider": "Vercel AI Gateway",
+		"vercelAiGatewayApiKeyLabel": "Ключ API",
+		"vercelAiGatewayApiKeyPlaceholder": "Введіть ваш ключ API Vercel AI Gateway",
 		"openaiCompatibleProvider": "Сумісний з OpenAI",
 		"openAiKeyLabel": "Ключ API OpenAI",
 		"openAiKeyPlaceholder": "Введіть ваш ключ API OpenAI",
@@ -123,13 +129,16 @@
 			"modelIdRequired": "ID моделі є обов'язковим",
 			"modelDimensionRequired": "Розмірність моделі є обов'язковою",
 			"geminiApiKeyRequired": "Ключ API Gemini є обов'язковим",
+			"mistralApiKeyRequired": "Ключ API Mistral є обов'язковим",
 			"ollamaBaseUrlRequired": "Базовий URL Ollama є обов'язковим",
 			"baseUrlRequired": "Базовий URL є обов'язковим",
-			"modelDimensionMinValue": "Розмірність моделі повинна бути більше 0"
+			"modelDimensionMinValue": "Розмірність моделі повинна бути більше 0",
+			"vercelAiGatewayApiKeyRequired": "Ключ API Vercel AI Gateway є обов'язковим"
 		}
 	},
 	"autoApprove": {
-		"description": "Дозволити Kilo Code автоматично виконувати операції без необхідності затвердження. Вмикайте ці налаштування, лише якщо ви повністю довіряєте ШІ та розумієте пов’язані з цим ризики безпеки.",
+		"description": "Дозволити Kilo Code автоматично виконувати операції без необхідності затвердження. Вмикайте ці налаштування, лише якщо ви повністю довіряєте ШІ та розумієте пов'язані з цим ризики безпеки.",
+		"enabled": "Автоматичне затвердження увімкнено",
 		"readOnly": {
 			"label": "Читати",
 			"description": "Якщо ввімкнено, Kilo Code автоматично переглядатиме вміст каталогу та читатиме файли, не вимагаючи від вас натискання кнопки «Схвалити».",
@@ -199,8 +208,14 @@
 		},
 		"apiRequestLimit": {
 			"title": "Максимальна кількість запитів",
-			"description": "Автоматично робити таку кількість запитів API, перш ніж запитувати дозвіл на продовження завдання.",
 			"unlimited": "Необмежено"
+		},
+		"apiCostLimit": {
+			"title": "Максимальна вартість",
+			"unlimited": "Необмежено"
+		},
+		"maxLimits": {
+			"description": "Автоматично виконувати запити до цих лімітів перед запитом дозволу на продовження."
 		},
 		"toggleAriaLabel": "Перемкнути автоматичне затвердження",
 		"disabledAriaLabel": "Автоматичне затвердження вимкнено - спочатку виберіть параметри",
@@ -232,6 +247,8 @@
 		"awsCustomArnDesc": "Переконайтеся, що регіон у ARN відповідає вибраному вами регіону AWS вище.",
 		"openRouterApiKey": "Ключ API OpenRouter",
 		"getOpenRouterApiKey": "Отримати ключ API OpenRouter",
+		"vercelAiGatewayApiKey": "Vercel AI Gateway API Key",
+		"getVercelAiGatewayApiKey": "Отримати Vercel AI Gateway API Key",
 		"apiKeyStorageNotice": "Ключі API надійно зберігаються в Secret Storage VSCode",
 		"glamaApiKey": "Ключ API Glama",
 		"getGlamaApiKey": "Отримати ключ API Glama",
@@ -252,19 +269,57 @@
 			"error": "Не вдалося оновити список моделей. Спробуйте ще раз."
 		},
 		"getRequestyApiKey": "Отримати ключ API Requesty",
+		"getRequestyBaseUrl": "Базовий URL",
+		"requestyUseCustomBaseUrl": "Використовувати власний базовий URL",
 		"openRouterTransformsText": "Стискати підказки та ланцюжки повідомлень до розміру контексту (<a>Перетворення OpenRouter</a>)",
 		"anthropicApiKey": "Ключ API Anthropic",
 		"getAnthropicApiKey": "Отримати ключ API Anthropic",
 		"anthropicUseAuthToken": "Передавати ключ API Anthropic як заголовок Authorization замість X-Api-Key",
+		"anthropic1MContextBetaLabel": "Увімкнути контекстне вікно 1M (Beta)",
+		"anthropic1MContextBetaDescription": "Розширити контекстне вікно до 1 мільйона токенів для Claude Sonnet 4",
+		"awsBedrock1MContextBetaLabel": "Увімкнути контекстне вікно 1M (Beta)",
+		"awsBedrock1MContextBetaDescription": "Розширити контекстне вікно до 1 мільйона токенів для Claude Sonnet 4",
+		"cerebrasApiKey": "Ключ API Cerebras",
+		"getCerebrasApiKey": "Отримати ключ API Cerebras",
 		"chutesApiKey": "Ключ API Chutes",
 		"getChutesApiKey": "Отримати ключ API Chutes",
+		"ioIntelligenceApiKey": "Ключ API IO Intelligence",
+		"ioIntelligenceApiKeyPlaceholder": "Введіть ваш ключ API IO Intelligence",
+		"getIoIntelligenceApiKey": "Отримати ключ API IO Intelligence",
 		"deepSeekApiKey": "Ключ API DeepSeek",
 		"getDeepSeekApiKey": "Отримати ключ API DeepSeek",
+		"featherlessApiKey": "Ключ API Featherless",
+		"getFeatherlessApiKey": "Отримати ключ API Featherless",
+		"fireworksApiKey": "Ключ API Fireworks",
+		"getFireworksApiKey": "Отримати ключ API Fireworks",
+		"moonshotApiKey": "Ключ API Moonshot",
+		"getMoonshotApiKey": "Отримати ключ API Moonshot",
+		"moonshotBaseUrl": "Точка входу Moonshot",
+		"zaiEntrypoint": "Точка входу Z AI",
+		"zaiEntrypointDescription": "Будь ласка, виберіть відповідну точку входу API залежно від вашого місцезнаходження. Якщо ви в Китаї, виберіть open.bigmodel.cn. Інакше виберіть api.z.ai.",
 		"geminiApiKey": "Ключ API Gemini",
+		"geminiUrlContext": "Включати URL у контекст",
+		"geminiUrlContextDescription": "Коли увімкнено, URL будуть включені в контекст при надсиланні запитів до Gemini",
+		"geminiGroundingSearch": "Увімкнути пошук заземлення",
+		"geminiGroundingSearchDescription": "Коли увімкнено, Gemini використовуватиме веб-пошук для надання актуальної інформації",
 		"getGroqApiKey": "Отримати ключ API Groq",
 		"groqApiKey": "Ключ API Groq",
 		"getGeminiApiKey": "Отримати ключ API Gemini",
 		"openAiApiKey": "Ключ API OpenAI",
+		"getHuggingFaceApiKey": "Отримати ключ API Hugging Face",
+		"huggingFaceApiKey": "Ключ API Hugging Face",
+		"huggingFaceModelId": "ID моделі",
+		"huggingFaceLoading": "Завантаження...",
+		"huggingFaceModelsCount": "({{count}} моделей)",
+		"huggingFaceSelectModel": "Виберіть модель...",
+		"huggingFaceSearchModels": "Пошук моделей...",
+		"huggingFaceNoModelsFound": "Моделі не знайдено",
+		"huggingFaceProvider": "Постачальник",
+		"huggingFaceProviderAuto": "Автоматично",
+		"huggingFaceSelectProvider": "Виберіть постачальника...",
+		"huggingFaceSearchProviders": "Пошук постачальників...",
+		"huggingFaceNoProvidersFound": "Постачальників не знайдено",
+		"awsApiKey": "Ключ API Amazon Bedrock",
 		"apiKey": "Ключ API",
 		"openAiBaseUrl": "Базовий URL",
 		"getOpenAiApiKey": "Отримати ключ API OpenAI",
@@ -294,6 +349,16 @@
 		"cacheUsageNote": "Примітка: якщо ви не бачите використання кешу, спробуйте вибрати іншу модель, а потім знову вибрати потрібну модель.",
 		"vscodeLmModel": "Мовна модель",
 		"vscodeLmWarning": "Примітка: це дуже експериментальна інтеграція, і підтримка провайдера може відрізнятися. Якщо ви отримуєте помилку про те, що модель не підтримується, це проблема на боці провайдера.",
+		"geminiParameters": {
+			"urlContext": {
+				"title": "Увімкнути контекст URL",
+				"description": "Дозволяє Gemini читати пов'язані сторінки, коли URL згадуються в розмовах"
+			},
+			"groundingSearch": {
+				"title": "Увімкнути заземлення з пошуком Google",
+				"description": "Підключає Gemini до веб-даних у реальному часі через пошук Google для більш точних і актуальних відповідей"
+			}
+		},
 		"googleCloudSetup": {
 			"title": "Щоб використовувати Google Cloud Vertex AI, вам потрібно:",
 			"step1": "1. Створити обліковий запис Google Cloud, увімкнути Vertex AI API та увімкнути потрібні моделі Claude.",
@@ -317,7 +382,10 @@
 		"ollama": {
 			"baseUrl": "Базовий URL (необов'язково)",
 			"modelId": "Ідентифікатор моделі",
-			"description": "Ollama дозволяє запускати моделі локально на вашому комп’ютері. Інструкції щодо початку роботи див. у їхньому посібнику зі швидкого старту.",
+			"apiKey": "Ключ API",
+			"apiKeyPlaceholder": "Введіть ваш ключ API",
+			"apiKeyInfo": "Ключ API буде надісланий як заголовок Authorization",
+			"description": "Ollama дозволяє запускати моделі локально на вашому комп'ютері. Інструкції щодо початку роботи див. у їхньому посібнику зі швидкого старту.",
 			"warning": "Примітка: Kilo Code використовує складні підказки і найкраще працює з моделями Claude. Менш здатні моделі можуть працювати не так, як очікувалося."
 		},
 		"unboundApiKey": "Ключ API Unbound",
@@ -326,7 +394,11 @@
 		"unboundInvalidApiKey": "Недійсний ключ API. Перевірте свій ключ API і спробуйте ще раз.",
 		"humanRelay": {
 			"description": "Ключ API не потрібен, але користувачеві потрібно допомогти скопіювати та вставити інформацію до веб-чату ШІ.",
-			"instructions": "Під час використання з’явиться діалогове вікно, і поточне повідомлення буде автоматично скопійовано до буфера обміну. Вам потрібно вставити це до веб-версій ШІ (наприклад, ChatGPT або Claude), потім скопіювати відповідь ШІ назад у діалогове вікно та натиснути кнопку підтвердження."
+			"instructions": "Під час використання з'явиться діалогове вікно, і поточне повідомлення буде автоматично скопійовано до буфера обміну. Вам потрібно вставити це до веб-версій ШІ (наприклад, ChatGPT або Claude), потім скопіювати відповідь ШІ назад у діалогове вікно та натиснути кнопку підтвердження."
+		},
+		"roo": {
+			"authenticatedMessage": "Безпечна автентифікація через ваш обліковий запис Roo Code Cloud.",
+			"connectButton": "Підключитися до Roo Code Cloud"
 		},
 		"openRouter": {
 			"providerRouting": {
@@ -335,10 +407,12 @@
 				"learnMore": "Дізнайтеся більше про маршрутизацію провайдерів"
 			}
 		},
-		"cerebras": {
-			"apiKey": "Ключ API Cerebras",
-			"getApiKey": "Отримати ключ API Cerebras"
-		},
+		"doubaoApiKey": "Ключ API Doubao",
+		"getDoubaoApiKey": "Отримати ключ API Doubao",
+		"zaiApiKey": "Ключ API Z.AI",
+		"getZaiApiKey": "Отримати ключ API Z.AI",
+		"sambaNovaApiKey": "Ключ API SambaNova",
+		"getSambaNovaApiKey": "Отримати ключ API SambaNova",
 		"customModel": {
 			"capabilities": "Налаштуйте можливості та ціни для вашої власної моделі, сумісної з OpenAI. Будьте обережні при вказуванні можливостей моделі, оскільки вони можуть вплинути на продуктивність Kilo Code.",
 			"maxTokens": {
@@ -393,9 +467,17 @@
 		},
 		"reasoningEffort": {
 			"label": "Зусилля з міркування моделі",
+			"minimal": "Мінімальний (найшвидший)",
 			"high": "Високий",
 			"medium": "Середній",
 			"low": "Низький"
+		},
+		"verbosity": {
+			"label": "Рівень деталізації виводу",
+			"high": "Високий",
+			"medium": "Середній",
+			"low": "Низький",
+			"description": "Контролює рівень деталізації відповідей моделі. Низький рівень створює стислі відповіді, тоді як високий рівень надає докладні пояснення."
 		},
 		"setReasoningLevel": "Увімкнути зусилля з міркування",
 		"claudeCode": {
@@ -419,7 +501,38 @@
 			"requirement4": "Не використовує API-ключі - аутентифікація здійснюється через OAuth",
 			"requirement5": "Потребує, щоб інструмент Gemini CLI був спочатку встановлений і аутентифікований",
 			"freeAccess": "Безкоштовний доступ через OAuth-аутентифікацію"
+		},
+		"io_intelligence": {
+			"name": "IO Intelligence",
+			"description": "Доступний штучний інтелект для повсякденних завдань"
+		},
+		"requesty": {
+			"name": "Requesty",
+			"description": "Швидкий та надійний AI помічник"
+		},
+		"kilo_code_openrouter": {
+			"description": "Доступ до 200+ моделей через OpenRouter з контекстним вікном 1M"
+		},
+		"qwenCode": {
+			"oauthPath": "Шлях до облікових даних OAuth (необов'язково)",
+			"oauthPathDescription": "Шлях до файлу облікових даних OAuth. Залиште порожнім для використання місця за замовчуванням (~/.qwen/oauth_creds.json).",
+			"description": "Цей провайдер використовує OAuth-аутентифікацію від сервісу Qwen і не потребує API-ключів.",
+			"instructions": "Будь ласка, дотримуйтесь офіційної документації для отримання файлу авторизації та розміщення його за вказаним шляхом.",
+			"setupLink": "Офіційна документація Qwen"
 		}
+	},
+	"contextWindow": {
+		"description": "Максимальний контекст розмови",
+		"oneMillion": "1M"
+	},
+	"maxTokens": {
+		"description": "Максимальна довжина відповіді"
+	},
+	"topP": {
+		"description": "Контроль різноманітності відповідей"
+	},
+	"kiloRemoteControl": {
+		"description": "Увімкнути віддалене керування завданнями"
 	},
 	"browser": {
 		"enable": {
@@ -517,6 +630,11 @@
 			"lines": "рядків",
 			"always_full_read": "Завжди читати весь файл"
 		},
+		"imageFileSize": {
+			"label": "Максимальний розмір файлу зображення",
+			"description": "Максимальний розмір файлу зображення в МБ для включення в контекст. Зображення більшого розміру будуть відхилені",
+			"mb": "МБ"
+		},
 		"condensingThreshold": {
 			"label": "Поріг запуску стиснення",
 			"selectProfile": "Налаштувати поріг для профілю",
@@ -525,6 +643,32 @@
 			"profileDescription": "Власний поріг лише для цього профілю (перевизначає глобальний за замовчуванням)",
 			"inheritDescription": "Цей профіль успадковує глобальний поріг за замовчуванням ({{threshold}}%)",
 			"usesGlobal": "(використовує глобальний {{threshold}}%)"
+		},
+		"diagnostics": {
+			"includeMessages": {
+				"label": "Автоматично включати діагностику в контекст",
+				"description": "Коли увімкнено, діагностичні повідомлення (помилки) з відредагованих файлів будуть автоматично включені в контекст. Ви завжди можете вручну включити всю діагностику робочого простору, використовуючи @problems."
+			},
+			"maxMessages": {
+				"label": "Максимальна кількість діагностичних повідомлень",
+				"description": "Обмежує кількість діагностичних повідомлень (помилки, попередження), включених у контекст. Коли встановлено, буде показано лише цю кількість діагностики, надаючи пріоритет помилкам над попередженнями. Встановіть 0 для необмеженої діагностики.",
+				"resetTooltip": "Скинути до значення за замовчуванням (50)",
+				"unlimitedLabel": "Необмежено"
+			},
+			"delayAfterWrite": {
+				"label": "Затримка після запису для дозволу діагностиці виявити потенційні проблеми",
+				"description": "Час очікування після запису файлів перед збиранням діагностики (у мілісекундах). Вищі значення можуть покращити точність, але сповільнюють виявлення помилок."
+			}
+		},
+		"maxImageFileSize": {
+			"label": "Максимальний розмір файлу зображення",
+			"mb": "МБ",
+			"description": "Максимальний розмір (у МБ) для файлів зображень, які можуть бути включені в запити. Більші файли будуть автоматично змінені на менший розмір."
+		},
+		"maxTotalImageSize": {
+			"label": "Максимальний загальний розмір зображень",
+			"mb": "МБ",
+			"description": "Максимальний кумулятивний ліміт розміру (у МБ) для всіх зображень в одному запиті. При перевищенні зображення будуть змінені на менший розмір, щоб поміститися в цей ліміт."
 		}
 	},
 	"terminal": {
@@ -539,6 +683,10 @@
 		"outputLineLimit": {
 			"label": "Обмеження виводу терміналу",
 			"description": "Максимальна кількість рядків, які включаються до виводу терміналу при виконанні команд. При перевищенні рядки будуть видалені з середини, заощаджуючи токени. <0>Дізнатися більше</0>"
+		},
+		"outputCharacterLimit": {
+			"label": "Обмеження символів терміналу",
+			"description": "Максимальна кількість символів, які включаються до виводу терміналу при виконанні команд. Це обмеження має пріоритет над обмеженням рядків для запобігання проблемам з пам'яттю від надзвичайно довгих рядків. При перевищенні вивід буде обрізано. <0>Дізнатися більше</0>"
 		},
 		"shellIntegrationTimeout": {
 			"label": "Тайм-аут інтеграції оболонки терміналу",
@@ -628,10 +776,6 @@
 			"name": "Використовувати експериментальний режим \"силового керування\"",
 			"description": "Якщо ввімкнено, Kilo Code частіше нагадуватиме моделі про деталі її поточного визначення режиму. Це призведе до сильнішого дотримання визначень ролей та власних інструкцій, але використовуватиме більше токенів на повідомлення."
 		},
-		"AUTOCOMPLETE": {
-			"name": "Використовувати експериментальну функцію \"автодоповнення\"",
-			"description": "Якщо ввімкнено, Kilo Code надаватиме вбудовані пропозиції коду під час введення. Потрібен Kilo Code API Provider."
-		},
 		"CONCURRENT_FILE_READS": {
 			"name": "Увімкнути одночасне читання файлів",
 			"description": "Якщо ввімкнено, Kilo Code може читати кілька файлів за один запит. Якщо вимкнено, Kilo Code повинен читати файли по одному. Вимкнення цього може допомогти при роботі з менш здатними моделями або коли ти хочеш більше контролю над доступом до файлів."
@@ -647,6 +791,47 @@
 		"MULTI_FILE_APPLY_DIFF": {
 			"name": "Увімкнути одночасне редагування файлів",
 			"description": "Якщо ввімкнено, Kilo Code може редагувати кілька файлів за один запит. Якщо вимкнено, Kilo Code повинен редагувати файли по одному. Вимкнення цього може допомогти при роботі з менш здатними моделями або коли ти хочеш більше контролю над модифікаціями файлів."
+		},
+		"MORPH_FAST_APPLY": {
+			"name": "Увімкнути Morph Fast Apply",
+			"description": "Якщо ввімкнено, Kilo Code може редагувати файли за допомогою Morph Fast Apply. Потребує провайдера API Kilo Code, OpenRouter або ключа API Morph.",
+			"apiKey": "Ключ API Morph (необов'язково)",
+			"placeholder": "Введіть ваш ключ API Morph (необов'язково)"
+		},
+		"PREVENT_FOCUS_DISRUPTION": {
+			"name": "Редагування у фоновому режимі",
+			"description": "Запобігає порушенню фокусу редактора, коли увімкнено. Редагування файлів відбувається у фоновому режимі без відкриття diff-перегляду або крадіжки фокусу. Ви можете продовжувати працювати без переривань, поки Kilo Code вносить зміни. Файли можуть відкриватися без фокусу для захоплення діагностики або залишатися повністю закритими."
+		},
+		"ASSISTANT_MESSAGE_PARSER": {
+			"name": "Використовувати новий парсер повідомлень",
+			"description": "Увімкнути експериментальний потоковий парсер повідомлень, який забезпечує значні покращення продуктивності для довгих відповідей асистента шляхом більш ефективної обробки повідомлень."
+		},
+		"NEW_TASK_REQUIRE_TODOS": {
+			"name": "Вимагати список 'завдань' для нових завдань",
+			"description": "Коли увімкнено, інструмент new_task вимагатиме надання параметра завдань. Це забезпечить, що всі нові завдання почнуть з чітким списком цілей. Коли вимкнено (за замовчуванням), параметр завдань залишається необов'язковим для зворотної сумісності."
+		},
+		"IMAGE_GENERATION": {
+			"name": "Увімкнути генерацію зображень ШІ",
+			"description": "Коли увімкнено, Kilo Code може генерувати зображення з текстових запитів. Потребує Kilo Code або OpenRouter API ключ.",
+			"apiProvider": "Провайдер API",
+			"openRouterApiKeyLabel": "OpenRouter API Key",
+			"openRouterApiKeyPlaceholder": "Введіть свій OpenRouter API ключ",
+			"kiloCodeApiKeyLabel": "Kilo Code API ключ",
+			"kiloCodeApiKeyPlaceholder": "Введіть свій Kilo Code API ключ",
+			"kiloCodeApiKeyPaste": "Вставити поточний API ключ Kilo Code",
+			"getApiKeyText": "Отримайте API ключ з",
+			"modelSelectionLabel": "Модель генерації зображень",
+			"modelSelectionDescription": "Виберіть модель для використання при генерації зображень",
+			"warningMissingKey": "⚠️ API ключ потрібен для генерації зображень, будь ласка, налаштуйте його вище.",
+			"successConfigured": "✓ Генерація зображень налаштована і готова до використання"
+		},
+		"RUN_SLASH_COMMAND": {
+			"name": "Увімкнути slash команди, ініційовані моделлю",
+			"description": "Коли увімкнено, Roo може запускати ваші slash команди для виконання робочих процесів."
+		},
+		"INLINE_ASSIST": {
+			"name": "Autocomplete",
+			"description": "Увімкни функції Autocomplete для швидких пропозицій коду та покращень безпосередньо у твоєму редакторі. Включає Швидке Завдання (Cmd+I) для цільових змін та Autocomplete для контекстуальних покращень."
 		}
 	},
 	"promptCaching": {
@@ -665,6 +850,7 @@
 		"noComputerUse": "Не підтримує використання комп'ютера",
 		"supportsPromptCache": "Підтримує кешування підказок",
 		"noPromptCache": "Не підтримує кешування підказок",
+		"contextWindow": "Контекстне вікно:",
 		"maxOutput": "Макс. вихід",
 		"inputPrice": "Ціна входу",
 		"outputPrice": "Ціна виходу",
@@ -719,7 +905,8 @@
 		"modelAvailability": "Ідентифікатор моделі ({{modelId}}), який ти надав, недоступний. Будь ласка, вибери іншу модель.",
 		"providerNotAllowed": "Провайдер '{{provider}}' не дозволений твоєю організацією",
 		"modelNotAllowed": "Модель '{{model}}' не дозволена для провайдера '{{provider}}' твоєю організацією",
-		"profileInvalid": "Цей профіль містить провайдера або модель, які не дозволені твоєю організацією"
+		"profileInvalid": "Цей профіль містить провайдера або модель, які не дозволені твоєю організацією",
+		"qwenCodeOauthPath": "Ви повинні надати дійсний шлях до облікових даних OAuth."
 	},
 	"placeholders": {
 		"apiKey": "Введи ключ API...",
@@ -754,6 +941,23 @@
 		"customArn": "Власний ARN",
 		"useCustomArn": "Використовувати власний ARN..."
 	},
+	"limitMaxTokensDescription": "Обмежити максимальну кількість токенів у відповіді",
+	"maxOutputTokensLabel": "Максимальні вихідні токени",
+	"maxTokensGenerateDescription": "Максимальна кількість токенів для генерації у відповіді",
 	"includeMaxOutputTokens": "Включити макс. вихідні токени",
-	"includeMaxOutputTokensDescription": "Надсилати параметр макс. вихідних токенів у запитах API. Деякі провайдери можуть не підтримувати це."
+	"includeMaxOutputTokensDescription": "Надсилати параметр макс. вихідних токенів у запитах API. Деякі провайдери можуть не підтримувати це.",
+	"serviceTier": {
+		"label": "Рівень сервісу",
+		"tooltip": "Для швидшого обробки API запитів, спробуйте рівень пріоритетного обробки. Для нижчих цін з вищою затримкою, спробуйте гнучкий рівень обробки.",
+		"standard": "Стандартний",
+		"flex": "Гнучкий",
+		"priority": "Пріоритетний",
+		"pricingTableTitle": "Ціни за рівнем сервісу (ціна за 1М токенів)",
+		"columns": {
+			"tier": "Рівень",
+			"input": "Вхід",
+			"output": "Вихід",
+			"cacheReads": "Читання кешу"
+		}
+	}
 }

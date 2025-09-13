@@ -41,6 +41,7 @@
 		"could_not_open_file_generic": "ไม่สามารถเปิดไฟล์!",
 		"checkpoint_timeout": "หมดเวลาเมื่อพยายามกู้คืน checkpoint",
 		"checkpoint_failed": "ล้มเหลวในการกู้คืน checkpoint",
+		"git_not_installed": "ต้องใช้ Git สำหรับฟีเจอร์ checkpoint กรุณาติดตั้ง Git เพื่อเปิดใช้งาน checkpoint",
 		"no_workspace": "กรุณาเปิดโฟลเดอร์โปรเจ็กต์ก่อน",
 		"update_support_prompt": "ล้มเหลวในการอัปเดต support prompt",
 		"reset_support_prompt": "ล้มเหลวในการรีเซ็ต support prompt",
@@ -73,6 +74,7 @@
 		"no_internet": "ไม่มีการเชื่อมต่ออินเทอร์เน็ต กรุณาตรวจสอบการเชื่อมต่อเครือข่ายและลองอีกครั้ง",
 		"url_forbidden": "การเข้าถึงเว็บไซต์นี้ถูกห้าม เว็บไซต์อาจบล็อกการเข้าถึงอัตโนมัติหรือต้องการการยืนยันตัวตน",
 		"url_page_not_found": "ไม่พบหน้าเว็บ กรุณาตรวจสอบว่า URL ถูกต้อง",
+		"url_request_aborted": "คำขอดึง URL ถูกยกเลิก อาจเกิดขึ้นได้หากเว็บไซต์บล็อกการเข้าถึงอัตโนมัติ ต้องการการยืนยันตัวตน หรือมีปัญหาเครือข่าย กรุณาลองใหม่อีกครั้งหรือตรวจสอบว่า URL สามารถเข้าถึงได้ในเบราว์เซอร์ปกติ",
 		"url_fetch_failed": "ล้มเหลวในการดึงเนื้อหา URL: {{error}}",
 		"url_fetch_error_with_url": "เกิดข้อผิดพลาดในการดึงเนื้อหาสำหรับ {{url}}: {{error}}",
 		"command_timeout": "การดำเนินการคำสั่งหมดเวลาหลังจาก {{seconds}} วินาที",
@@ -83,12 +85,20 @@
 		"share_task_not_found": "ไม่พบงานหรือการเข้าถึงถูกปฏิเสธ",
 		"mode_import_failed": "ล้มเหลวในการนำเข้าโหมด: {{error}}",
 		"delete_rules_folder_failed": "ล้มเหลวในการลบโฟลเดอร์กฎ: {{rulesFolderPath}} ข้อผิดพลาด: {{error}}",
+		"command_not_found": "ไม่พบคำสั่ง '{{name}}'",
+		"open_command_file": "ล้มเหลวในการเปิดไฟล์คำสั่ง",
+		"delete_command": "ล้มเหลวในการลบคำสั่ง",
+		"no_workspace_for_project_command": "ไม่พบโฟลเดอร์พื้นที่ทำงานสำหรับคำสั่งโครงการ",
+		"command_already_exists": "คำสั่ง \"{{commandName}}\" มีอยู่แล้ว",
+		"create_command_failed": "ล้มเหลวในการสร้างคำสั่ง",
+		"command_template_content": "---\ndescription: \"คำอธิบายสั้นๆ ว่าคำสั่งนี้ทำอะไร\"\n---\n\nนี่คือคำสั่ง slash ใหม่ แก้ไขไฟล์นี้เพื่อปรับแต่งพฤติกรรมของคำสั่ง",
 		"claudeCode": {
 			"processExited": "กระบวนการ Claude Code ออกด้วยรหัส {{exitCode}}",
 			"errorOutput": "ผลลัพธ์ข้อผิดพลาด: {{output}}",
 			"processExitedWithError": "กระบวนการ Claude Code ออกด้วยรหัส {{exitCode}} ผลลัพธ์ข้อผิดพลาด: {{output}}",
 			"stoppedWithReason": "Claude Code หยุดด้วยเหตุผล: {{reason}}",
-			"apiKeyModelPlanMismatch": "คีย์ API และแผนการสมัครสมาชิกอนุญาตให้ใช้โมเดลที่แตกต่างกัน ตรวจสอบให้แน่ใจว่าโมเดลที่เลือกรวมอยู่ในแผนของคุณ"
+			"apiKeyModelPlanMismatch": "คีย์ API และแผนการสมัครสมาชิกอนุญาตให้ใช้โมเดลที่แตกต่างกัน ตรวจสอบให้แน่ใจว่าโมเดลที่เลือกรวมอยู่ในแผนของคุณ",
+			"notFound": "ไม่พบไฟล์ปฏิบัติการ Claude Code '{{claudePath}}'\n\nกรุณาติดตั้ง Claude Code CLI:\n1. เยี่ยมชม {{installationUrl}} เพื่อดาวน์โหลด Claude Code\n2. ทำตามคำแนะนำการติดตั้งสำหรับระบบปฏิบัติการของคุณ\n3. ตรวจสอบให้แน่ใจว่าคำสั่ง 'claude' พร้อมใช้งานใน PATH\n4. หรือกำหนดค่าเส้นทางแบบกำหนดเองในการตั้งค่า Kilo Code ภายใต้ 'เส้นทาง Claude Code'\n\nข้อผิดพลาดเดิม: {{originalError}}"
 		},
 		"geminiCli": {
 			"oauthLoadFailed": "ล้มเหลวในการโหลดข้อมูลประจำตัว OAuth กรุณายืนยันตัวตนก่อน: {{error}}",
@@ -99,6 +109,29 @@
 			"badRequest": "คำขอไม่ถูกต้อง: {{details}}",
 			"apiError": "ข้อผิดพลาด Gemini CLI API: {{error}}",
 			"completionError": "ข้อผิดพลาดการทำงานเสร็จสิ้น Gemini CLI: {{error}}"
+		},
+		"gemini": {
+			"generate_stream": "ข้อผิดพลาดในการสร้างสตรีมบริบท Gemini: {{error}}",
+			"generate_complete_prompt": "ข้อผิดพลาดการทำงานเสร็จสิ้น Gemini: {{error}}",
+			"sources": "แหล่งที่มา:"
+		},
+		"cerebras": {
+			"authenticationFailed": "การยืนยันตัวตน Cerebras API ล้มเหลว กรุณาตรวจสอบว่า API key ของคุณถูกต้องและยังไม่หมดอายุ",
+			"accessForbidden": "การเข้าถึง Cerebras API ถูกปฏิเสธ API key ของคุณอาจไม่มีสิทธิ์เข้าถึงโมเดลหรือฟีเจอร์ที่ร้องขอ",
+			"rateLimitExceeded": "เกินขีดจำกัดอัตรา Cerebras API กรุณารอก่อนทำคำขอครั้งต่อไป",
+			"serverError": "ข้อผิดพลาดเซิร์ฟเวอร์ Cerebras API ({{status}}) กรุณาลองใหม่อีกครั้งในภายหลัง",
+			"genericError": "ข้อผิดพลาด Cerebras API ({{status}}): {{message}}",
+			"noResponseBody": "ข้อผิดพลาด Cerebras API: ไม่มีเนื้อหาการตอบกลับ",
+			"completionError": "ข้อผิดพลาดการเติมเต็ม Cerebras: {{error}}"
+		},
+		"qwenCode": {
+			"oauthLoadFailed": "ล้มเหลวในการโหลดข้อมูลประจำตัว OAuth กรุณายืนยันตัวตนก่อน: {{error}}"
+		},
+		"roo": {
+			"authenticationRequired": "ผู้ให้บริการ Roo ต้องการการยืนยันตัวตนบนคลาวด์ กรุณาเข้าสู่ระบบ Roo Code Cloud"
+		},
+		"api": {
+			"invalidKeyInvalidChars": "API key มีตัวอักษรที่ไม่ถูกต้อง"
 		}
 	},
 	"warnings": {
@@ -131,7 +164,8 @@
 	},
 	"buttons": {
 		"save": "บันทึก",
-		"edit": "แก้ไข"
+		"edit": "แก้ไข",
+		"learn_more": "เรียนรู้เพิ่มเติม"
 	},
 	"tasks": {
 		"canceled": "ข้อผิดพลาดงาน: ถูกหยุดและยกเลิกโดยผู้ใช้",
@@ -158,11 +192,17 @@
 			"deleteFailed": "ล้มเหลวในการลบโหมดกำหนดเอง: {{error}}",
 			"resetFailed": "ล้มเหลวในการรีเซ็ตโหมดกำหนดเอง: {{error}}",
 			"modeNotFound": "ข้อผิดพลาดในการเขียน: ไม่พบโหมด",
-			"noWorkspaceForProject": "ไม่พบโฟลเดอร์พื้นที่ทำงานสำหรับโหมดเฉพาะโครงการ"
+			"noWorkspaceForProject": "ไม่พบโฟลเดอร์พื้นที่ทำงานสำหรับโหมดเฉพาะโครงการ",
+			"rulesCleanupFailed": "ลบโหมดเรียบร้อยแล้ว แต่ไม่สามารถลบโฟลเดอร์กฎที่ {{rulesFolderPath}} คุณอาจต้องลบด้วยตนเอง"
 		},
 		"scope": {
 			"project": "โครงการ",
 			"global": "ทั่วไป"
+		}
+	},
+	"marketplace": {
+		"mode": {
+			"rulesCleanupFailed": "เอาโหมดออกเรียบร้อยแล้ว แต่ไม่สามารถลบโฟลเดอร์กฎที่ {{rulesFolderPath}} คุณอาจต้องลบด้วยตนเอง"
 		}
 	},
 	"mdm": {
@@ -170,6 +210,9 @@
 			"cloud_auth_required": "องค์กรของคุณต้องการการยืนยันตัวตน Kilo Code Cloud กรุณาลงชื่อเข้าใช้เพื่อดำเนินการต่อ",
 			"organization_mismatch": "คุณต้องยืนยันตัวตนด้วยบัญชี Kilo Code Cloud ขององค์กรของคุณ",
 			"verification_failed": "ไม่สามารถตรวจสอบการยืนยันตัวตนขององค์กร"
+		},
+		"info": {
+			"organization_requires_auth": "องค์กรของคุณต้องการการยืนยันตัวตน"
 		}
 	},
 	"prompts": {
@@ -178,6 +221,11 @@
 			"description": "คุณแน่ใจหรือไม่ว่าต้องการลบโหมด {{scope}} นี้? การดำเนินการนี้จะลบโฟลเดอร์กฎที่เกี่ยวข้องด้วย ที่: {{rulesFolderPath}}",
 			"descriptionNoRules": "คุณแน่ใจหรือไม่ว่าต้องการลบโหมดที่กำหนดเองนี้?",
 			"confirm": "ลบ"
+		}
+	},
+	"commands": {
+		"preventCompletionWithOpenTodos": {
+			"description": "ป้องกันการทำงานเสร็จสิ้นเมื่อมี todo ที่ยังไม่เสร็จในรายการ todo"
 		}
 	}
 }

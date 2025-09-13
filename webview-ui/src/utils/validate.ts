@@ -47,6 +47,11 @@ function validateModelsAndKeysProvided(apiConfiguration: ProviderSettings): stri
 				return i18next.t("settings:validation.apiKey")
 			}
 			break
+		case "deepinfra":
+			if (!apiConfiguration.deepInfraApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
 		case "litellm":
 			if (!apiConfiguration.litellmApiKey) {
 				return i18next.t("settings:validation.apiKey")
@@ -107,11 +112,6 @@ function validateModelsAndKeysProvided(apiConfiguration: ProviderSettings): stri
 				return i18next.t("settings:validation.modelSelector")
 			}
 			break
-		case "fireworks":
-			if (!apiConfiguration.fireworksApiKey) {
-				return "You must provide a valid API key or choose a different provider."
-			}
-			break
 		// kilocode_change start
 		case "kilocode":
 			if (!apiConfiguration.kilocodeToken) {
@@ -119,6 +119,44 @@ function validateModelsAndKeysProvided(apiConfiguration: ProviderSettings): stri
 			}
 			break
 		// kilocode_change end
+		case "huggingface":
+			if (!apiConfiguration.huggingFaceApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			if (!apiConfiguration.huggingFaceModelId) {
+				return i18next.t("settings:validation.modelId")
+			}
+			break
+		case "cerebras":
+			if (!apiConfiguration.cerebrasApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
+		case "fireworks":
+			if (!apiConfiguration.fireworksApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
+		case "io-intelligence":
+			if (!apiConfiguration.ioIntelligenceApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
+		case "featherless":
+			if (!apiConfiguration.featherlessApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
+		case "qwen-code":
+			if (!apiConfiguration.qwenCodeOauthPath) {
+				return i18next.t("settings:validation.qwenCodeOauthPath")
+			}
+			break
+		case "vercel-ai-gateway":
+			if (!apiConfiguration.vercelAiGatewayApiKey) {
+				return i18next.t("settings:validation.apiKey")
+			}
+			break
 	}
 
 	return undefined
@@ -172,6 +210,8 @@ function getModelIdForProvider(apiConfiguration: ProviderSettings, provider: str
 			return apiConfiguration.unboundModelId
 		case "requesty":
 			return apiConfiguration.requestyModelId
+		case "deepinfra":
+			return apiConfiguration.deepInfraModelId
 		case "litellm":
 			return apiConfiguration.litellmModelId
 		case "openai":
@@ -183,6 +223,12 @@ function getModelIdForProvider(apiConfiguration: ProviderSettings, provider: str
 		case "vscode-lm":
 			// vsCodeLmModelSelector is an object, not a string
 			return apiConfiguration.vsCodeLmModelSelector?.id
+		case "huggingface":
+			return apiConfiguration.huggingFaceModelId
+		case "io-intelligence":
+			return apiConfiguration.ioIntelligenceModelId
+		case "vercel-ai-gateway":
+			return apiConfiguration.vercelAiGatewayModelId
 		default:
 			return apiConfiguration.apiModelId
 	}
@@ -244,6 +290,9 @@ export function validateModelId(apiConfiguration: ProviderSettings, routerModels
 		case "requesty":
 			modelId = apiConfiguration.requestyModelId
 			break
+		case "deepinfra":
+			modelId = apiConfiguration.deepInfraModelId
+			break
 		case "ollama":
 			modelId = apiConfiguration.ollamaModelId
 			break
@@ -252,6 +301,12 @@ export function validateModelId(apiConfiguration: ProviderSettings, routerModels
 			break
 		case "litellm":
 			modelId = apiConfiguration.litellmModelId
+			break
+		case "io-intelligence":
+			modelId = apiConfiguration.ioIntelligenceModelId
+			break
+		case "vercel-ai-gateway":
+			modelId = apiConfiguration.vercelAiGatewayModelId
 			break
 	}
 

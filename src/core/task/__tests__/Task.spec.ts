@@ -1418,12 +1418,404 @@ describe("Cline", () => {
 					enableDiff: false,
 					task: "test task",
 					startTask: false,
-					context: mockExtensionContext,
+					context: mockExtensionContext, // kilocode_change
 				})
 
 				expect(task.diffEnabled).toBe(false)
 				expect(task.diffStrategy).toBeUndefined()
 			})
+		})
+
+		describe("getApiProtocol", () => {
+			it("should determine API protocol based on provider and model", async () => {
+				// Test with Anthropic provider
+				const anthropicConfig = {
+					...mockApiConfig,
+					apiProvider: "anthropic" as const,
+					apiModelId: "gpt-4",
+				}
+				const anthropicTask = new Task({
+					provider: mockProvider,
+					apiConfiguration: anthropicConfig,
+					task: "test task",
+					startTask: false,
+					context: mockExtensionContext, // kilocode_change
+				})
+				// Should use anthropic protocol even with non-claude model
+				expect(anthropicTask.apiConfiguration.apiProvider).toBe("anthropic")
+
+				// Test with OpenRouter provider and Claude model
+				const openrouterClaudeConfig = {
+					apiProvider: "openrouter" as const,
+					openRouterModelId: "anthropic/claude-3-opus",
+				}
+				const openrouterClaudeTask = new Task({
+					provider: mockProvider,
+					apiConfiguration: openrouterClaudeConfig,
+					task: "test task",
+					startTask: false,
+					context: mockExtensionContext, // kilocode_change
+				})
+				expect(openrouterClaudeTask.apiConfiguration.apiProvider).toBe("openrouter")
+
+				// Test with OpenRouter provider and non-Claude model
+				const openrouterGptConfig = {
+					apiProvider: "openrouter" as const,
+					openRouterModelId: "openai/gpt-4",
+				}
+				const openrouterGptTask = new Task({
+					provider: mockProvider,
+					apiConfiguration: openrouterGptConfig,
+					task: "test task",
+					startTask: false,
+					context: mockExtensionContext, // kilocode_change
+				})
+				expect(openrouterGptTask.apiConfiguration.apiProvider).toBe("openrouter")
+
+				// Test with various Claude model formats
+				const claudeModelFormats = [
+					"claude-3-opus",
+					"Claude-3-Sonnet",
+					"CLAUDE-instant",
+					"anthropic/claude-3-haiku",
+					"some-provider/claude-model",
+				]
+
+				for (const modelId of claudeModelFormats) {
+					const config = {
+						apiProvider: "openai" as const,
+						openAiModelId: modelId,
+					}
+					const task = new Task({
+						provider: mockProvider,
+						apiConfiguration: config,
+						task: "test task",
+						startTask: false,
+						context: mockExtensionContext, // kilocode_change
+					})
+					// Verify the model ID contains claude (case-insensitive)
+					expect(modelId.toLowerCase()).toContain("claude")
+				}
+			})
+
+			it("should handle edge cases for API protocol detection", async () => {
+				// Test with undefined provider
+				const undefinedProviderConfig = {
+					apiModelId: "claude-3-opus",
+				}
+				const undefinedProviderTask = new Task({
+					provider: mockProvider,
+					apiConfiguration: undefinedProviderConfig,
+					task: "test task",
+					startTask: false,
+					context: mockExtensionContext, // kilocode_change
+				})
+				expect(undefinedProviderTask.apiConfiguration.apiProvider).toBeUndefined()
+
+				// Test with no model ID
+				const noModelConfig = {
+					apiProvider: "openai" as const,
+				}
+				const noModelTask = new Task({
+					provider: mockProvider,
+					apiConfiguration: noModelConfig,
+					task: "test task",
+					startTask: false,
+					context: mockExtensionContext, // kilocode_change
+				})
+				expect(noModelTask.apiConfiguration.apiProvider).toBe("openai")
+			})
+		})
+
+		describe("submitUserMessage", () => {
+			it("should always route through webview sendMessage invoke", async () => {
+				const task = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "initial task",
+					startTask: false,
+					context: mockExtensionContext,
+				})
+
+				// Set up some existing messages to simulate an ongoing conversation
+				task.clineMessages = [
+					{
+						ts: Date.now(),
+						type: "say",
+						say: "text",
+						text: "Initial message",
+					},
+				]
+
+				// Call submitUserMessage
+				task.submitUserMessage("test message", ["image1.png"])
+
+				// Verify postMessageToWebview was called with sendMessage invoke
+				expect(mockProvider.postMessageToWebview).toHaveBeenCalledWith({
+					type: "invoke",
+					invoke: "sendMessage",
+					text: "test message",
+					images: ["image1.png"],
+				})
+			})
+
+			it("should handle empty messages gracefully", async () => {
+				const task = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "initial task",
+					startTask: false,
+					context: mockExtensionContext,
+				})
+
+				// Call with empty text and no images
+				task.submitUserMessage("", [])
+
+				// Should not call postMessageToWebview for empty messages
+				expect(mockProvider.postMessageToWebview).not.toHaveBeenCalled()
+
+				// Call with whitespace only
+				task.submitUserMessage("   ", [])
+				expect(mockProvider.postMessageToWebview).not.toHaveBeenCalled()
+			})
+
+			it("should route through webview for both new and existing tasks", async () => {
+				const task = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "initial task",
+					startTask: false,
+					context: mockExtensionContext,
+				})
+
+				// Test with no messages (new task scenario)
+				task.clineMessages = []
+				task.submitUserMessage("new task", ["image1.png"])
+
+				expect(mockProvider.postMessageToWebview).toHaveBeenCalledWith({
+					type: "invoke",
+					invoke: "sendMessage",
+					text: "new task",
+					images: ["image1.png"],
+				})
+
+				// Clear mock
+				mockProvider.postMessageToWebview.mockClear()
+
+				// Test with existing messages (ongoing task scenario)
+				task.clineMessages = [
+					{
+						ts: Date.now(),
+						type: "say",
+						say: "text",
+						text: "Initial message",
+					},
+				]
+				task.submitUserMessage("follow-up message", ["image2.png"])
+
+				expect(mockProvider.postMessageToWebview).toHaveBeenCalledWith({
+					type: "invoke",
+					invoke: "sendMessage",
+					text: "follow-up message",
+					images: ["image2.png"],
+				})
+			})
+
+			it("should handle undefined provider gracefully", async () => {
+				const task = new Task({
+					provider: mockProvider,
+					apiConfiguration: mockApiConfig,
+					task: "initial task",
+					startTask: false,
+					context: mockExtensionContext,
+				})
+
+				// Simulate weakref returning undefined
+				Object.defineProperty(task, "providerRef", {
+					value: { deref: () => undefined },
+					writable: false,
+					configurable: true,
+				})
+
+				// Spy on console.error to verify error is logged
+				const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+				// Should log error but not throw
+				task.submitUserMessage("test message")
+
+				expect(consoleErrorSpy).toHaveBeenCalledWith("[Task#submitUserMessage] Provider reference lost")
+				expect(mockProvider.postMessageToWebview).not.toHaveBeenCalled()
+
+				// Restore console.error
+				consoleErrorSpy.mockRestore()
+			})
+		})
+	})
+
+	describe("Conversation continuity after condense and deletion", () => {
+		it("should set suppressPreviousResponseId when last message is condense_context", async () => {
+			// Arrange: create task
+			const task = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "initial task",
+				startTask: false,
+				context: mockExtensionContext, // kilocode_change
+			})
+
+			// Ensure provider state returns required fields for attemptApiRequest
+			mockProvider.getState = vi.fn().mockResolvedValue({
+				apiConfiguration: mockApiConfig,
+			})
+
+			// Simulate deletion that leaves a condense_context as the last message
+			const condenseMsg = {
+				ts: Date.now(),
+				type: "say" as const,
+				say: "condense_context" as const,
+				contextCondense: {
+					summary: "summarized",
+					cost: 0.001,
+					prevContextTokens: 1200,
+					newContextTokens: 400,
+				},
+			}
+			await task.overwriteClineMessages([condenseMsg])
+
+			// Spy and return a minimal successful stream to exercise attemptApiRequest
+			const mockStream = {
+				async *[Symbol.asyncIterator]() {
+					yield { type: "text", text: "ok" }
+				},
+				async next() {
+					return { done: true, value: { type: "text", text: "ok" } }
+				},
+				async return() {
+					return { done: true, value: undefined }
+				},
+				async throw(e: any) {
+					throw e
+				},
+				[Symbol.asyncDispose]: async () => {},
+			} as AsyncGenerator<ApiStreamChunk>
+
+			const createMessageSpy = vi.spyOn(task.api, "createMessage").mockReturnValue(mockStream)
+
+			// Act: initiate an API request
+			const iterator = task.attemptApiRequest(0)
+			await iterator.next() // read first chunk to ensure call happened
+
+			// Assert: metadata includes suppressPreviousResponseId set to true
+			expect(createMessageSpy).toHaveBeenCalled()
+			const callArgs = createMessageSpy.mock.calls[0]
+			// Args: [systemPrompt, cleanConversationHistory, metadata]
+			const metadata = callArgs?.[2]
+			expect(metadata?.suppressPreviousResponseId).toBe(true)
+
+			// The skip flag should be reset after the call
+			expect((task as any).skipPrevResponseIdOnce).toBe(false)
+		})
+	})
+	describe("abortTask", () => {
+		it("should set abort flag and emit TaskAborted event", async () => {
+			const task = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				context: mockExtensionContext, // kilocode_change
+			})
+
+			// Spy on emit method
+			const emitSpy = vi.spyOn(task, "emit")
+
+			// Mock the dispose method to avoid actual cleanup
+			vi.spyOn(task, "dispose").mockImplementation(() => {})
+
+			// Call abortTask
+			await task.abortTask()
+
+			// Verify abort flag is set
+			expect(task.abort).toBe(true)
+
+			// Verify TaskAborted event was emitted
+			expect(emitSpy).toHaveBeenCalledWith("taskAborted")
+		})
+
+		it("should be equivalent to clicking Cancel button functionality", async () => {
+			const task = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				context: mockExtensionContext, // kilocode_change
+			})
+
+			// Mock the dispose method to track cleanup
+			const disposeSpy = vi.spyOn(task, "dispose").mockImplementation(() => {})
+
+			// Call abortTask
+			await task.abortTask()
+
+			// Verify the same behavior as Cancel button
+			expect(task.abort).toBe(true)
+			expect(disposeSpy).toHaveBeenCalled()
+		})
+
+		it("should work with TaskLike interface", async () => {
+			const task = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				context: mockExtensionContext, // kilocode_change
+			})
+
+			// Cast to TaskLike to ensure interface compliance
+			const taskLike = task as any // TaskLike interface from types package
+
+			// Verify abortTask method exists and is callable
+			expect(typeof taskLike.abortTask).toBe("function")
+
+			// Mock the dispose method to avoid actual cleanup
+			vi.spyOn(task, "dispose").mockImplementation(() => {})
+
+			// Call abortTask through interface
+			await taskLike.abortTask()
+
+			// Verify it works
+			expect(task.abort).toBe(true)
+		})
+
+		it("should handle errors during disposal gracefully", async () => {
+			const task = new Task({
+				provider: mockProvider,
+				apiConfiguration: mockApiConfig,
+				task: "test task",
+				startTask: false,
+				context: mockExtensionContext, // kilocode_change
+			})
+
+			// Mock dispose to throw an error
+			const mockError = new Error("Disposal failed")
+			vi.spyOn(task, "dispose").mockImplementation(() => {
+				throw mockError
+			})
+
+			// Spy on console.error to verify error is logged
+			const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+			// abortTask should not throw even if dispose fails
+			await expect(task.abortTask()).resolves.not.toThrow()
+
+			// Verify error was logged
+			expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Error during task"), mockError)
+
+			// Verify abort flag is still set
+			expect(task.abort).toBe(true)
+
+			// Restore console.error
+			consoleErrorSpy.mockRestore()
 		})
 	})
 })

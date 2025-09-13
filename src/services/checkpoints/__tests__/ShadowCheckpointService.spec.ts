@@ -12,6 +12,16 @@ import * as fileSearch from "../../../services/search/file-search"
 
 import { RepoPerTaskCheckpointService } from "../RepoPerTaskCheckpointService"
 
+// kilocode_change start
+vi.mock("@roo-code/telemetry", () => ({
+	TelemetryService: {
+		instance: {
+			captureEvent: vi.fn(),
+		},
+	},
+}))
+// kilocode_change end
+
 const tmpDir = path.join(os.tmpdir(), "CheckpointService")
 
 const initWorkspaceRepo = async ({
@@ -693,7 +703,6 @@ describe.each([[RepoPerTaskCheckpointService, "RepoPerTaskCheckpointService"]])(
 				expect(eventData.type).toBe("checkpoint")
 				expect(eventData.toHash).toBe(result?.commit)
 				expect(typeof eventData.duration).toBe("number")
-				expect(typeof eventData.isFirst).toBe("boolean") // Can be true or false depending on checkpoint history
 			})
 
 			it("does not emit checkpoint event when no changes and allowEmpty=false", async () => {

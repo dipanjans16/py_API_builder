@@ -41,6 +41,7 @@
 		"could_not_open_file_generic": "Не вдалося відкрити файл!",
 		"checkpoint_timeout": "Час очікування вичерпано під час спроби відновити checkpoint.",
 		"checkpoint_failed": "Не вдалося відновити checkpoint.",
+		"git_not_installed": "Git потрібен для функції checkpoint. Будь ласка, встанови Git, щоб увімкнути checkpoint.",
 		"no_workspace": "Будь ласка, спочатку відкрий папку проекту",
 		"update_support_prompt": "Не вдалося оновити support prompt",
 		"reset_support_prompt": "Не вдалося скинути support prompt",
@@ -73,6 +74,7 @@
 		"no_internet": "Немає підключення до інтернету. Будь ласка, перевір мережеве з'єднання і спробуй ще раз.",
 		"url_forbidden": "Доступ до цього веб-сайту заборонено. Сайт може блокувати автоматичний доступ або вимагати автентифікації.",
 		"url_page_not_found": "Сторінку не знайдено. Будь ласка, перевір правильність URL.",
+		"url_request_aborted": "Запит на отримання URL було перервано. Це може статися, якщо сайт блокує автоматичний доступ, вимагає автентифікації або є проблема з мережею. Будь ласка, спробуй ще раз або перевір, чи доступний URL у звичайному браузері.",
 		"url_fetch_failed": "Не вдалося отримати вміст URL: {{error}}",
 		"url_fetch_error_with_url": "Помилка отримання вмісту для {{url}}: {{error}}",
 		"command_timeout": "Виконання команди перевищило час очікування після {{seconds}} секунд",
@@ -86,10 +88,18 @@
 			"errorOutput": "Вивід помилки: {{output}}",
 			"processExitedWithError": "Процес Claude Code завершився з кодом {{exitCode}}. Вивід помилки: {{output}}",
 			"stoppedWithReason": "Claude Code зупинився з причини: {{reason}}",
-			"apiKeyModelPlanMismatch": "Ключі API та плани підписки дозволяють різні моделі. Переконайся, що вибрана модель включена в твій план."
+			"apiKeyModelPlanMismatch": "Ключі API та плани підписки дозволяють різні моделі. Переконайся, що вибрана модель включена в твій план.",
+			"notFound": "Виконуваний файл Claude Code '{{claudePath}}' не знайдено.\n\nБудь ласка, встанови Claude Code CLI:\n1. Відвідай {{installationUrl}} для завантаження Claude Code\n2. Дотримуйся інструкцій з встановлення для твоєї операційної системи\n3. Переконайся, що команда 'claude' доступна в твоєму PATH\n4. Альтернативно, налаштуй користувацький шлях у налаштуваннях Roo під 'Claude Code Path'\n\nОригінальна помилка: {{originalError}}"
 		},
 		"mode_import_failed": "Не вдалося імпортувати режим: {{error}}",
 		"delete_rules_folder_failed": "Не вдалося видалити папку правил: {{rulesFolderPath}}. Помилка: {{error}}",
+		"command_not_found": "Команду '{{name}}' не знайдено",
+		"open_command_file": "Не вдалося відкрити файл команди",
+		"delete_command": "Не вдалося видалити команду",
+		"no_workspace_for_project_command": "Не знайдено папку робочого простору для команди проекту",
+		"command_already_exists": "Команда \"{{commandName}}\" вже існує",
+		"create_command_failed": "Не вдалося створити команду",
+		"command_template_content": "---\ndescription: \"Короткий опис того, що робить ця команда\"\n---\n\nЦе нова slash команда. Відредагуйте цей файл, щоб налаштувати поведінку команди.",
 		"geminiCli": {
 			"oauthLoadFailed": "Не вдалося завантажити OAuth дані для входу. Будь ласка, спочатку автентифікуйся: {{error}}",
 			"tokenRefreshFailed": "Не вдалося оновити OAuth token: {{error}}",
@@ -99,6 +109,29 @@
 			"badRequest": "Неправильний запит: {{details}}",
 			"apiError": "Помилка Gemini CLI API: {{error}}",
 			"completionError": "Помилка завершення Gemini CLI: {{error}}"
+		},
+		"gemini": {
+			"generate_stream": "Помилка генерації контекстного потоку Gemini: {{error}}",
+			"generate_complete_prompt": "Помилка завершення Gemini: {{error}}",
+			"sources": "Джерела:"
+		},
+		"cerebras": {
+			"authenticationFailed": "Автентифікація Cerebras API не вдалася. Будь ласка, перевірте, що ваш API ключ дійсний і не прострочений.",
+			"accessForbidden": "Доступ до Cerebras API заборонено. Ваш API ключ може не мати доступу до запитуваної моделі або функції.",
+			"rateLimitExceeded": "Перевищено ліміт швидкості Cerebras API. Будь ласка, зачекайте перед наступним запитом.",
+			"serverError": "Помилка сервера Cerebras API ({{status}}). Будь ласка, спробуйте пізніше.",
+			"genericError": "Помилка Cerebras API ({{status}}): {{message}}",
+			"noResponseBody": "Помилка Cerebras API: Немає тіла відповіді",
+			"completionError": "Помилка завершення Cerebras: {{error}}"
+		},
+		"qwenCode": {
+			"oauthLoadFailed": "Не вдалося завантажити OAuth дані для входу. Будь ласка, спочатку автентифікуйся: {{error}}"
+		},
+		"roo": {
+			"authenticationRequired": "Провайдер Roo вимагає автентифікації в хмарі. Будь ласка, увійди в Roo Code Cloud."
+		},
+		"api": {
+			"invalidKeyInvalidChars": "API ключ містить недопустимі символи."
 		}
 	},
 	"warnings": {
@@ -131,7 +164,8 @@
 	},
 	"buttons": {
 		"save": "Зберегти",
-		"edit": "Редагувати"
+		"edit": "Редагувати",
+		"learn_more": "Дізнатися більше"
 	},
 	"tasks": {
 		"canceled": "Помилка завдання: Воно було зупинено та скасовано користувачем.",
@@ -158,11 +192,17 @@
 			"deleteFailed": "Не вдалося видалити користувацький режим: {{error}}",
 			"resetFailed": "Не вдалося скинути користувацькі режими: {{error}}",
 			"modeNotFound": "Помилка запису: Режим не знайдено",
-			"noWorkspaceForProject": "Не знайдено папку робочого простору для режиму конкретного проекту"
+			"noWorkspaceForProject": "Не знайдено папку робочого простору для режиму конкретного проекту",
+			"rulesCleanupFailed": "Режим успішно видалено, але не вдалося видалити папку правил в {{rulesFolderPath}}. Можливо, вам доведеться видалити її вручну."
 		},
 		"scope": {
 			"project": "проект",
 			"global": "глобальний"
+		}
+	},
+	"marketplace": {
+		"mode": {
+			"rulesCleanupFailed": "Режим успішно видалено, але не вдалося видалити папку правил в {{rulesFolderPath}}. Можливо, вам доведеться видалити її вручну."
 		}
 	},
 	"mdm": {
@@ -170,6 +210,9 @@
 			"cloud_auth_required": "Твоя організація вимагає автентифікації Kilo Code Cloud. Будь ласка, увійди, щоб продовжити.",
 			"organization_mismatch": "Ти повинен бути автентифікований з обліковим записом Kilo Code Cloud твоєї організації.",
 			"verification_failed": "Не вдалося перевірити автентифікацію організації."
+		},
+		"info": {
+			"organization_requires_auth": "Твоя організація вимагає автентифікації."
 		}
 	},
 	"prompts": {
@@ -178,6 +221,11 @@
 			"description": "Ти впевнений, що хочеш видалити цей {{scope}} режим? Це також видалить пов'язану папку правил за адресою: {{rulesFolderPath}}",
 			"descriptionNoRules": "Ти впевнений, що хочеш видалити цей користувацький режим?",
 			"confirm": "Видалити"
+		}
+	},
+	"commands": {
+		"preventCompletionWithOpenTodos": {
+			"description": "Запобігти завершенню завдання, коли є незавершені пункти в списку завдань"
 		}
 	}
 }

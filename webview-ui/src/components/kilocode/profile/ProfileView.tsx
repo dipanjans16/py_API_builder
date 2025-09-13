@@ -1,7 +1,5 @@
-// import { useExtensionState } from "@/context/ExtensionStateContext" // No longer needed
 import React, { useEffect } from "react"
 import { vscode } from "@/utils/vscode"
-
 import {
 	BalanceDataResponsePayload,
 	ProfileData,
@@ -16,13 +14,14 @@ import { useAppTranslation } from "@/i18n/TranslationContext"
 import { Tab, TabContent, TabHeader } from "@src/components/common/Tab"
 import { Button } from "@src/components/ui"
 import KiloCodeAuth from "../common/KiloCodeAuth"
+import { OrganizationSelector } from "../common/OrganizationSelector"
 
 interface ProfileViewProps {
 	onDone: () => void
 }
 
 const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
-	const { apiConfiguration, currentApiConfigName } = useExtensionState()
+	const { apiConfiguration, currentApiConfigName, uriScheme, uiKind } = useExtensionState()
 	const { t } = useAppTranslation()
 	const [profileData, setProfileData] = React.useState<ProfileData | undefined | null>(null)
 	const [balance, setBalance] = React.useState<number | null>(null)
@@ -36,7 +35,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 		vscode.postMessage({
 			type: "fetchBalanceDataRequest",
 		})
-	}, [apiConfiguration?.kilocodeToken])
+	}, [apiConfiguration?.kilocodeToken, apiConfiguration?.kilocodeOrganizationId])
 
 	useEffect(() => {
 		const handleMessage = (event: MessageEvent<WebviewMessage>) => {
@@ -59,6 +58,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 					setBalance(null)
 				}
 				setIsLoadingBalance(false)
+			} else if (message.type === "updateProfileData") {
+				vscode.postMessage({
+					type: "fetchProfileDataRequest",
+				})
+				vscode.postMessage({
+					type: "fetchBalanceDataRequest",
+				})
 			}
 		}
 
@@ -66,7 +72,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 		return () => {
 			window.removeEventListener("message", handleMessage)
 		}
-	}, [])
+	}, [profileData])
 
 	const user = profileData?.user
 
@@ -78,6 +84,37 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 			apiConfiguration: {
 				...apiConfiguration,
 				kilocodeToken: "",
+				kilocodeOrganizationId: undefined,
+			},
+		})
+	}
+
+	const creditPackages = [
+		{
+			credits: 20,
+			popular: false,
+		},
+		{
+			credits: 50,
+			popular: true,
+		},
+		{
+			credits: 100,
+			popular: false,
+		},
+		{
+			credits: 200,
+			popular: false,
+		},
+	]
+
+	const handleBuyCredits = (credits: number) => () => {
+		vscode.postMessage({
+			type: "shopBuyCredits",
+			values: {
+				credits: credits,
+				uriScheme: uriScheme,
+				uiKind: uiKind,
 			},
 		})
 	}
@@ -107,7 +144,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 											</div>
 										)}
 
-										<div className="flex flex-col">
+										<div className="flex flex-col flex-1">
 											{user.name && (
 												<h2 className="text-[var(--vscode-foreground)] m-0 mb-1 text-lg font-medium">
 													{user.name}
@@ -121,6 +158,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 											)}
 										</div>
 									</div>
+
+									<OrganizationSelector className="mb-6" />
 								</div>
 
 								<div className="w-full flex gap-2 flex-col min-[225px]:flex-row">
@@ -162,7 +201,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 														className="mt-1"
 														onClick={() => {
 															setIsLoadingBalance(true)
-
 															vscode.postMessage({ type: "fetchBalanceDataRequest" })
 														}}>
 														<span className="codicon codicon-refresh"></span>
@@ -171,6 +209,59 @@ const ProfileView: React.FC<ProfileViewProps> = ({ onDone }) => {
 											)
 										)}
 									</div>
+
+									{/* Buy Credits Section - Only show for personal accounts */}
+									{!apiConfiguration?.kilocodeOrganizationId && (
+										<div className="w-full mt-8">
+											<div className="text-lg font-semibold text-[var(--vscode-foreground)] mb-4 text-center">
+												{t("kilocode:profile.shop.title")}
+											</div>
+
+											<div className="grid grid-cols-1 min-[300px]:grid-cols-2 gap-3 mb-6">
+												{creditPackages.map((pkg) => (
+													<div
+														key={pkg.credits}
+														className={`relative border rounded-lg p-4 bg-[var(--vscode-editor-background)] transition-all hover:shadow-md ${
+															pkg.popular
+																? "border-[var(--vscode-button-background)] ring-1 ring-[var(--vscode-button-background)]"
+																: "border-[var(--vscode-input-border)]"
+														}`}>
+														{pkg.popular && (
+															<div className="absolute -top-2 left-1/2 transform -translate-x-1/2">
+																<span className="bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] text-xs px-2 py-1 rounded-full font-medium">
+																	{t("kilocode:profile.shop.popular")}
+																</span>
+															</div>
+														)}
+
+														<div className="text-center">
+															<div className="text-2xl font-bold text-[var(--vscode-foreground)] mb-1">
+																${pkg.credits}
+															</div>
+															<div className="text-sm text-[var(--vscode-descriptionForeground)] mb-2">
+																{t("kilocode:profile.shop.credits")}
+															</div>
+															<VSCodeButton
+																appearance={pkg.popular ? "primary" : "secondary"}
+																className="w-full"
+																onClick={handleBuyCredits(pkg.credits)}>
+																{t("kilocode:profile.shop.action")}
+															</VSCodeButton>
+														</div>
+													</div>
+												))}
+											</div>
+
+											<div className="text-center">
+												<VSCodeButtonLink
+													href="https://kilocode.ai/profile"
+													appearance="secondary"
+													className="text-sm">
+													{t("kilocode:profile.shop.viewAll")}
+												</VSCodeButtonLink>
+											</div>
+										</div>
+									)}
 								</div>
 							</div>
 						) : (

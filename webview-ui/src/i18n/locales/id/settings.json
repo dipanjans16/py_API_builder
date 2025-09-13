@@ -41,13 +41,19 @@
 		"title": "Pengindeksan Codebase",
 		"enableLabel": "Aktifkan Pengindeksan Codebase",
 		"enableDescription": "Aktifkan pengindeksan kode untuk pencarian dan pemahaman konteks yang lebih baik",
-		"providerLabel": "Provider Embeddings",
-		"selectProviderPlaceholder": "Pilih provider",
+		"profileLabel": "Provider Embeddings",
+		"selectProfilePlaceholder": "Pilih provider",
 		"openaiProvider": "OpenAI",
 		"ollamaProvider": "Ollama",
 		"geminiProvider": "Gemini",
 		"geminiApiKeyLabel": "API Key:",
 		"geminiApiKeyPlaceholder": "Masukkan kunci API Gemini Anda",
+		"vercelAiGatewayProvider": "Vercel AI Gateway",
+		"vercelAiGatewayApiKeyLabel": "API Key",
+		"vercelAiGatewayApiKeyPlaceholder": "Masukkan kunci API Vercel AI Gateway Anda",
+		"mistralProvider": "Mistral",
+		"mistralApiKeyLabel": "Kunci API:",
+		"mistralApiKeyPlaceholder": "Masukkan kunci API Mistral Anda",
 		"openaiCompatibleProvider": "OpenAI Compatible",
 		"openAiKeyLabel": "OpenAI API Key",
 		"openAiKeyPlaceholder": "Masukkan kunci API OpenAI kamu",
@@ -110,6 +116,8 @@
 			"modelIdRequired": "ID Model diperlukan",
 			"modelDimensionRequired": "Dimensi model diperlukan",
 			"geminiApiKeyRequired": "Kunci API Gemini diperlukan",
+			"mistralApiKeyRequired": "Kunci API Mistral diperlukan",
+			"vercelAiGatewayApiKeyRequired": "Kunci API Vercel AI Gateway diperlukan",
 			"ollamaBaseUrlRequired": "URL dasar Ollama diperlukan",
 			"baseUrlRequired": "URL dasar diperlukan",
 			"modelDimensionMinValue": "Dimensi model harus lebih besar dari 0"
@@ -124,6 +132,7 @@
 	},
 	"autoApprove": {
 		"description": "Izinkan Kilo Code untuk secara otomatis melakukan operasi tanpa memerlukan persetujuan. Aktifkan pengaturan ini hanya jika kamu sepenuhnya mempercayai AI dan memahami risiko keamanan yang terkait.",
+		"enabled": "Auto-Approve Diaktifkan",
 		"toggleAriaLabel": "Beralih persetujuan otomatis",
 		"disabledAriaLabel": "Persetujuan otomatis dinonaktifkan - pilih opsi terlebih dahulu",
 		"readOnly": {
@@ -198,7 +207,14 @@
 			"description": "Secara otomatis membuat sejumlah permintaan API ini sebelum meminta persetujuan untuk melanjutkan tugas.",
 			"unlimited": "Tidak terbatas"
 		},
-		"selectOptionsFirst": "Pilih setidaknya satu opsi di bawah ini untuk mengaktifkan persetujuan otomatis"
+		"selectOptionsFirst": "Pilih setidaknya satu opsi di bawah ini untuk mengaktifkan persetujuan otomatis",
+		"apiCostLimit": {
+			"title": "Biaya Maksimal",
+			"unlimited": "Tidak Terbatas"
+		},
+		"maxLimits": {
+			"description": "Secara otomatis membuat permintaan hingga batas ini sebelum meminta persetujuan untuk melanjutkan."
+		}
 	},
 	"providers": {
 		"providerDocumentation": "Dokumentasi {{provider}}",
@@ -226,11 +242,9 @@
 		"awsCustomArnDesc": "Pastikan region di ARN cocok dengan AWS Region yang kamu pilih di atas.",
 		"openRouterApiKey": "OpenRouter API Key",
 		"getOpenRouterApiKey": "Dapatkan OpenRouter API Key",
+		"vercelAiGatewayApiKey": "Vercel AI Gateway API Key",
+		"getVercelAiGatewayApiKey": "Dapatkan Vercel AI Gateway API Key",
 		"apiKeyStorageNotice": "API key disimpan dengan aman di Secret Storage VSCode",
-		"cerebras": {
-			"apiKey": "Cerebras API Key",
-			"getApiKey": "Dapatkan Cerebras API Key"
-		},
 		"glamaApiKey": "Glama API Key",
 		"getGlamaApiKey": "Dapatkan Glama API Key",
 		"useCustomBaseUrl": "Gunakan base URL kustom",
@@ -250,18 +264,57 @@
 			"error": "Gagal merefresh daftar model. Silakan coba lagi."
 		},
 		"getRequestyApiKey": "Dapatkan Requesty API Key",
+		"getRequestyBaseUrl": "Base URL",
+		"requestyUseCustomBaseUrl": "Gunakan URL dasar khusus",
 		"openRouterTransformsText": "Kompres prompt dan rantai pesan ke ukuran konteks (<a>OpenRouter Transforms</a>)",
 		"anthropicApiKey": "Anthropic API Key",
 		"getAnthropicApiKey": "Dapatkan Anthropic API Key",
 		"anthropicUseAuthToken": "Kirim Anthropic API Key sebagai Authorization header alih-alih X-Api-Key",
+		"anthropic1MContextBetaLabel": "Aktifkan jendela konteks 1M (Beta)",
+		"anthropic1MContextBetaDescription": "Memperluas jendela konteks menjadi 1 juta token untuk Claude Sonnet 4",
+		"awsBedrock1MContextBetaLabel": "Aktifkan jendela konteks 1M (Beta)",
+		"awsBedrock1MContextBetaDescription": "Memperluas jendela konteks menjadi 1 juta token untuk Claude Sonnet 4",
+		"cerebrasApiKey": "Cerebras API Key",
+		"getCerebrasApiKey": "Dapatkan Cerebras API Key",
 		"chutesApiKey": "Chutes API Key",
 		"getChutesApiKey": "Dapatkan Chutes API Key",
+		"fireworksApiKey": "Fireworks API Key",
+		"getFireworksApiKey": "Dapatkan Fireworks API Key",
+		"featherlessApiKey": "Featherless API Key",
+		"getFeatherlessApiKey": "Dapatkan Featherless API Key",
+		"ioIntelligenceApiKey": "IO Intelligence API Key",
+		"ioIntelligenceApiKeyPlaceholder": "Masukkan kunci API IO Intelligence Anda",
+		"getIoIntelligenceApiKey": "Dapatkan IO Intelligence API Key",
 		"deepSeekApiKey": "DeepSeek API Key",
 		"getDeepSeekApiKey": "Dapatkan DeepSeek API Key",
+		"doubaoApiKey": "Kunci API Doubao",
+		"getDoubaoApiKey": "Dapatkan Kunci API Doubao",
+		"moonshotApiKey": "Kunci API Moonshot",
+		"getMoonshotApiKey": "Dapatkan Kunci API Moonshot",
+		"moonshotBaseUrl": "Titik Masuk Moonshot",
+		"zaiApiKey": "Kunci API Z AI",
+		"getZaiApiKey": "Dapatkan Kunci API Z AI",
+		"zaiEntrypoint": "Titik Masuk Z AI",
+		"zaiEntrypointDescription": "Silakan pilih titik masuk API yang sesuai berdasarkan lokasi Anda. Jika Anda berada di China, pilih open.bigmodel.cn. Jika tidak, pilih api.z.ai.",
 		"geminiApiKey": "Gemini API Key",
 		"getGroqApiKey": "Dapatkan Groq API Key",
 		"groqApiKey": "Groq API Key",
+		"getSambaNovaApiKey": "Dapatkan SambaNova API Key",
+		"sambaNovaApiKey": "SambaNova API Key",
+		"getHuggingFaceApiKey": "Dapatkan Kunci API Hugging Face",
+		"huggingFaceApiKey": "Kunci API Hugging Face",
+		"huggingFaceModelId": "ID Model",
 		"getGeminiApiKey": "Dapatkan Gemini API Key",
+		"huggingFaceLoading": "Memuat...",
+		"huggingFaceModelsCount": "({{count}} model)",
+		"huggingFaceSelectModel": "Pilih model...",
+		"huggingFaceSearchModels": "Cari model...",
+		"huggingFaceNoModelsFound": "Tidak ada model ditemukan",
+		"huggingFaceProvider": "Penyedia",
+		"huggingFaceProviderAuto": "Otomatis",
+		"huggingFaceSelectProvider": "Pilih penyedia...",
+		"huggingFaceSearchProviders": "Cari penyedia...",
+		"huggingFaceNoProvidersFound": "Tidak ada penyedia ditemukan",
 		"openAiApiKey": "OpenAI API Key",
 		"apiKey": "API Key",
 		"openAiBaseUrl": "Base URL",
@@ -276,6 +329,7 @@
 		"litellmBaseUrl": "LiteLLM Base URL",
 		"awsCredentials": "AWS Credentials",
 		"awsProfile": "AWS Profile",
+		"awsApiKey": "Kunci API Amazon Bedrock",
 		"awsProfileName": "Nama AWS Profile",
 		"awsAccessKey": "AWS Access Key",
 		"awsSecretKey": "AWS Secret Key",
@@ -292,6 +346,16 @@
 		"cacheUsageNote": "Catatan: Jika kamu tidak melihat penggunaan cache, coba pilih model yang berbeda lalu pilih model yang kamu inginkan lagi.",
 		"vscodeLmModel": "Model Bahasa",
 		"vscodeLmWarning": "Catatan: Ini adalah integrasi yang sangat eksperimental dan dukungan provider akan bervariasi. Jika kamu mendapat error tentang model yang tidak didukung, itu adalah masalah di sisi provider.",
+		"geminiParameters": {
+			"urlContext": {
+				"title": "Aktifkan konteks URL",
+				"description": "Memungkinkan Gemini mengakses dan memproses URL untuk konteks tambahan saat menghasilkan respons. Berguna untuk tugas yang memerlukan analisis konten web."
+			},
+			"groundingSearch": {
+				"title": "Aktifkan Grounding dengan Pencarian Google",
+				"description": "Memungkinkan Gemini mencari informasi terkini di Google dan mendasarkan respons pada data waktu nyata. Berguna untuk kueri yang memerlukan informasi terkini."
+			}
+		},
 		"googleCloudSetup": {
 			"title": "Untuk menggunakan Google Cloud Vertex AI, kamu perlu:",
 			"step1": "1. Buat akun Google Cloud, aktifkan Vertex AI API & aktifkan model Claude yang diinginkan.",
@@ -315,6 +379,9 @@
 		"ollama": {
 			"baseUrl": "Base URL (opsional)",
 			"modelId": "Model ID",
+			"apiKey": "API Key",
+			"apiKeyPlaceholder": "Masukkan API key Anda",
+			"apiKeyInfo": "API key akan dikirim sebagai Authorization header",
 			"description": "Ollama memungkinkan kamu menjalankan model secara lokal di komputer. Untuk instruksi cara memulai, lihat panduan quickstart mereka.",
 			"warning": "Catatan: Kilo Code menggunakan prompt kompleks dan bekerja terbaik dengan model Claude. Model yang kurang mampu mungkin tidak bekerja seperti yang diharapkan."
 		},
@@ -325,6 +392,10 @@
 		"humanRelay": {
 			"description": "Tidak diperlukan API key, tetapi pengguna perlu membantu menyalin dan menempel informasi ke web chat AI.",
 			"instructions": "Selama penggunaan, kotak dialog akan muncul dan pesan saat ini akan disalin ke clipboard secara otomatis. Kamu perlu menempel ini ke versi web AI (seperti ChatGPT atau Claude), lalu salin balasan AI kembali ke kotak dialog dan klik tombol konfirmasi."
+		},
+		"roo": {
+			"authenticatedMessage": "Terautentikasi dengan aman melalui akun Roo Code Cloud Anda.",
+			"connectButton": "Hubungkan ke Roo Code Cloud"
 		},
 		"openRouter": {
 			"providerRouting": {
@@ -387,9 +458,17 @@
 		},
 		"reasoningEffort": {
 			"label": "Upaya Reasoning Model",
+			"minimal": "Minimal (Tercepat)",
 			"high": "Tinggi",
 			"medium": "Sedang",
 			"low": "Rendah"
+		},
+		"verbosity": {
+			"label": "Verbositas Output",
+			"high": "Tinggi",
+			"medium": "Sedang",
+			"low": "Rendah",
+			"description": "Mengontrol seberapa detail respons model. Verbositas rendah menghasilkan jawaban singkat, sedangkan verbositas tinggi memberikan penjelasan menyeluruh."
 		},
 		"setReasoningLevel": "Aktifkan Upaya Reasoning",
 		"claudeCode": {
@@ -413,6 +492,13 @@
 			"requirement4": "Tidak menggunakan kunci API - autentikasi ditangani melalui OAuth",
 			"requirement5": "Memerlukan alat Gemini CLI diinstal dan diautentikasi terlebih dahulu",
 			"freeAccess": "Akses gratis melalui autentikasi OAuth"
+		},
+		"qwenCode": {
+			"oauthPath": "Jalur Kredensial OAuth (opsional)",
+			"oauthPathDescription": "Jalur ke file kredensial OAuth. Biarkan kosong untuk menggunakan lokasi default (~/.qwen/oauth_creds.json).",
+			"description": "Provider ini menggunakan autentikasi OAuth dari layanan Qwen dan tidak memerlukan kunci API.",
+			"instructions": "Silakan ikuti dokumentasi resmi untuk mendapatkan file otorisasi dan tempatkan di jalur yang ditentukan.",
+			"setupLink": "Dokumentasi Resmi Qwen"
 		}
 	},
 	"browser": {
@@ -483,6 +569,23 @@
 			"name": "Secara otomatis memicu kondensasi konteks cerdas",
 			"description": "Ketika diaktifkan, Kilo Code akan secara otomatis mengondensasi konteks ketika ambang batas tercapai. Ketika dinonaktifkan, kamu masih dapat memicu kondensasi konteks secara manual."
 		},
+		"diagnostics": {
+			"includeMessages": {
+				"label": "Secara otomatis sertakan diagnostik dalam konteks",
+				"description": "Ketika diaktifkan, pesan diagnostik (error) dari file yang diedit akan secara otomatis disertakan dalam konteks. Kamu selalu dapat menyertakan semua diagnostik workspace secara manual menggunakan @problems."
+			},
+			"maxMessages": {
+				"label": "Pesan diagnostik maksimum",
+				"description": "Jumlah maksimum pesan diagnostik yang akan disertakan per file. Batas ini berlaku untuk penyertaan otomatis (ketika checkbox diaktifkan) dan penyebutan manual @problems. Nilai yang lebih tinggi memberikan lebih banyak konteks tetapi meningkatkan penggunaan token.",
+				"resetTooltip": "Reset ke nilai default (50)",
+				"unlimited": "Pesan diagnostik tidak terbatas",
+				"unlimitedLabel": "Tak terbatas"
+			},
+			"delayAfterWrite": {
+				"label": "Tunda setelah penulisan untuk memungkinkan diagnostik mendeteksi potensi masalah",
+				"description": "Waktu tunggu setelah penulisan file sebelum melanjutkan, memungkinkan alat diagnostik untuk memproses perubahan dan mendeteksi masalah."
+			}
+		},
 		"condensingThreshold": {
 			"label": "Ambang Batas Pemicu Kondensasi",
 			"selectProfile": "Konfigurasi ambang batas untuk profil",
@@ -513,6 +616,16 @@
 			"description": "Kilo Code membaca sejumlah baris ini ketika model menghilangkan nilai start/end. Jika angka ini kurang dari total file, Kilo Code menghasilkan indeks nomor baris dari definisi kode. Kasus khusus: -1 menginstruksikan Kilo Code untuk membaca seluruh file (tanpa indexing), dan 0 menginstruksikannya untuk tidak membaca baris dan hanya menyediakan indeks baris untuk konteks minimal. Nilai yang lebih rendah meminimalkan penggunaan konteks awal, memungkinkan pembacaan rentang baris yang tepat selanjutnya. Permintaan start/end eksplisit tidak dibatasi oleh pengaturan ini.",
 			"lines": "baris",
 			"always_full_read": "Selalu baca seluruh file"
+		},
+		"maxImageFileSize": {
+			"label": "Ukuran file gambar maksimum",
+			"mb": "MB",
+			"description": "Ukuran maksimum (dalam MB) untuk file gambar yang dapat diproses oleh alat baca file."
+		},
+		"maxTotalImageSize": {
+			"label": "Ukuran total gambar maksimum",
+			"mb": "MB",
+			"description": "Batas ukuran kumulatif maksimum (dalam MB) untuk semua gambar yang diproses dalam satu operasi read_file. Saat membaca beberapa gambar, ukuran setiap gambar ditambahkan ke total. Jika menyertakan gambar lain akan melebihi batas ini, gambar tersebut akan dilewati."
 		}
 	},
 	"terminal": {
@@ -527,6 +640,10 @@
 		"outputLineLimit": {
 			"label": "Batas output terminal",
 			"description": "Jumlah maksimum baris yang disertakan dalam output terminal saat mengeksekusi perintah. Ketika terlampaui, baris akan dihapus dari tengah, menghemat token. <0>Pelajari lebih lanjut</0>"
+		},
+		"outputCharacterLimit": {
+			"label": "Batas karakter terminal",
+			"description": "Jumlah maksimum karakter yang akan disertakan dalam output terminal saat menjalankan perintah. Batas ini lebih diutamakan daripada batas baris untuk mencegah masalah memori dari baris yang sangat panjang. Ketika terlampaui, output akan dipotong. <0>Pelajari lebih lanjut</0>"
 		},
 		"shellIntegrationTimeout": {
 			"label": "Timeout integrasi shell terminal",
@@ -637,10 +754,6 @@
 			"name": "Gunakan mode \"power steering\" eksperimental",
 			"description": "Ketika diaktifkan, Kilo Code akan mengingatkan model tentang detail definisi mode saat ini lebih sering. Ini akan menghasilkan kepatuhan yang lebih kuat terhadap definisi peran dan instruksi kustom, tetapi akan menggunakan lebih banyak token per pesan."
 		},
-		"AUTOCOMPLETE": {
-			"name": "Gunakan fitur \"autocomplete\" eksperimental",
-			"description": "Ketika diaktifkan, Kilo Code akan memberikan saran kode inline saat kamu mengetik. Memerlukan Kilo Code API Provider."
-		},
 		"CONCURRENT_FILE_READS": {
 			"name": "Aktifkan pembacaan file bersamaan",
 			"description": "Ketika diaktifkan, Kilo Code dapat membaca beberapa file dalam satu permintaan. Ketika dinonaktifkan, Kilo Code harus membaca file satu per satu. Menonaktifkan ini dapat membantu saat bekerja dengan model yang kurang mampu atau ketika kamu ingin kontrol lebih terhadap akses file."
@@ -656,6 +769,47 @@
 		"MULTI_FILE_APPLY_DIFF": {
 			"name": "Aktifkan edit file bersamaan",
 			"description": "Ketika diaktifkan, Kilo Code dapat mengedit beberapa file dalam satu permintaan. Ketika dinonaktifkan, Kilo Code harus mengedit file satu per satu. Menonaktifkan ini dapat membantu saat bekerja dengan model yang kurang mampu atau ketika kamu ingin kontrol lebih terhadap modifikasi file."
+		},
+		"MORPH_FAST_APPLY": {
+			"name": "Aktifkan Morph Fast Apply",
+			"description": "Ketika diaktifkan, Kilo Code dapat mengedit file menggunakan Morph Fast Apply. Memerlukan Kilo Code API Provider, OpenRouter atau kunci API Morph.",
+			"apiKey": "Kunci API Morph (opsional)",
+			"placeholder": "Masukkan kunci API Morph Anda (opsional)"
+		},
+		"PREVENT_FOCUS_DISRUPTION": {
+			"name": "Pengeditan Latar Belakang",
+			"description": "Ketika diaktifkan, mencegah gangguan fokus editor. Pengeditan file terjadi di latar belakang tanpa membuka tampilan diff atau mencuri fokus. Anda dapat terus bekerja tanpa gangguan saat Kilo Code melakukan perubahan. File mungkin dibuka tanpa fokus untuk menangkap diagnostik atau tetap tertutup sepenuhnya."
+		},
+		"ASSISTANT_MESSAGE_PARSER": {
+			"name": "Gunakan parser pesan baru",
+			"description": "Aktifkan parser pesan streaming eksperimental yang meningkatkan kinerja untuk respons panjang dengan memproses pesan lebih efisien."
+		},
+		"NEW_TASK_REQUIRE_TODOS": {
+			"name": "Membutuhkan daftar 'todos' untuk tugas baru",
+			"description": "Ketika diaktifkan, alat new_task akan membutuhkan parameter todos untuk disediakan. Ini memastikan semua tugas baru dimulai dengan daftar tujuan yang jelas. Ketika dinonaktifkan (default), parameter todos tetap opsional untuk kompatibilitas mundur."
+		},
+		"IMAGE_GENERATION": {
+			"name": "Aktifkan pembuatan gambar AI",
+			"description": "Ketika diaktifkan, Kilo Code dapat menghasilkan gambar dari prompt teks. Memerlukan kunci API Kilo Code atau OpenRouter yang dikonfigurasi.",
+			"apiProvider": "Penyedia API",
+			"openRouterApiKeyLabel": "Kunci API OpenRouter",
+			"openRouterApiKeyPlaceholder": "Masukkan kunci API OpenRouter Anda",
+			"kiloCodeApiKeyLabel": "Kunci API Kilo Code",
+			"kiloCodeApiKeyPlaceholder": "Masukkan kunci API Kilo Code Anda",
+			"kiloCodeApiKeyPaste": "Tempel kunci API Kilo Code saat ini",
+			"getApiKeyText": "Dapatkan kunci API Anda dari",
+			"modelSelectionLabel": "Model Pembuatan Gambar",
+			"modelSelectionDescription": "Pilih model untuk pembuatan gambar",
+			"warningMissingKey": "⚠️ Kunci API diperlukan untuk pembuatan gambar, silakan konfigurasi di atas.",
+			"successConfigured": "✓ Pembuatan gambar dikonfigurasi dan siap digunakan"
+		},
+		"INLINE_ASSIST": {
+			"name": "Autocomplete",
+			"description": "Aktifkan fitur Autocomplete untuk saran kode cepat dan perbaikan langsung di editor Anda. Termasuk Tugas Cepat (Cmd+I) untuk perubahan yang ditargetkan dan Autocomplete untuk perbaikan kontekstual."
+		},
+		"RUN_SLASH_COMMAND": {
+			"name": "Aktifkan perintah slash yang dimulai model",
+			"description": "Ketika diaktifkan, Kilo Code dapat menjalankan perintah slash Anda untuk mengeksekusi alur kerja."
 		}
 	},
 	"promptCaching": {
@@ -674,6 +828,7 @@
 		"noComputerUse": "Tidak mendukung computer use",
 		"supportsPromptCache": "Mendukung prompt caching",
 		"noPromptCache": "Tidak mendukung prompt caching",
+		"contextWindow": "Jendela Konteks:",
 		"maxOutput": "Output maksimum",
 		"inputPrice": "Harga input",
 		"outputPrice": "Harga output",
@@ -728,7 +883,8 @@
 		"modelAvailability": "Model ID ({{modelId}}) yang kamu berikan tidak tersedia. Silakan pilih model yang berbeda.",
 		"providerNotAllowed": "Provider '{{provider}}' tidak diizinkan oleh organisasi kamu",
 		"modelNotAllowed": "Model '{{model}}' tidak diizinkan untuk provider '{{provider}}' oleh organisasi kamu",
-		"profileInvalid": "Profil ini berisi provider atau model yang tidak diizinkan oleh organisasi kamu"
+		"profileInvalid": "Profil ini berisi provider atau model yang tidak diizinkan oleh organisasi kamu",
+		"qwenCodeOauthPath": "Kamu harus memberikan jalur kredensial OAuth yang valid"
 	},
 	"placeholders": {
 		"apiKey": "Masukkan API Key...",
@@ -770,5 +926,22 @@
 		}
 	},
 	"includeMaxOutputTokens": "Sertakan token output maksimum",
-	"includeMaxOutputTokensDescription": "Kirim parameter token output maksimum dalam permintaan API. Beberapa provider mungkin tidak mendukung ini."
+	"includeMaxOutputTokensDescription": "Kirim parameter token output maksimum dalam permintaan API. Beberapa provider mungkin tidak mendukung ini.",
+	"limitMaxTokensDescription": "Batasi jumlah maksimum token dalam respons",
+	"maxOutputTokensLabel": "Token output maksimum",
+	"maxTokensGenerateDescription": "Token maksimum untuk dihasilkan dalam respons",
+	"serviceTier": {
+		"label": "Tingkat layanan",
+		"tooltip": "Untuk pemrosesan permintaan API yang lebih cepat, coba tingkat layanan pemrosesan prioritas. Untuk harga lebih rendah dengan latensi lebih tinggi, coba tingkat pemrosesan fleksibel.",
+		"standard": "Standar",
+		"flex": "Fleksibel",
+		"priority": "Prioritas",
+		"pricingTableTitle": "Harga berdasarkan tingkat layanan (harga per 1 juta token)",
+		"columns": {
+			"tier": "Tingkat",
+			"input": "Input",
+			"output": "Output",
+			"cacheReads": "Pembacaan cache"
+		}
+	}
 }

@@ -13,6 +13,29 @@ import { executeRipgrep } from "../../services/search/file-search"
 import { CheckpointDiff, CheckpointResult, CheckpointEventMap } from "./types"
 import { getExcludePatterns } from "./excludes"
 
+// kilocode_change start
+import { TelemetryService } from "@roo-code/telemetry"
+import { TelemetryEventName } from "@roo-code/types"
+import { stringifyError } from "../../shared/kilocode/errorUtils"
+import * as vscode from "vscode"
+import { t } from "../../i18n"
+
+function reportError(callsite: string, error: unknown) {
+	TelemetryService.instance.captureEvent(TelemetryEventName.CHECKPOINT_FAILURE, {
+		callsite,
+		error: stringifyError(error),
+	})
+}
+
+const warningsShown = new Set<string>()
+function showWarning(message: string) {
+	if (warningsShown.size < 5 && !warningsShown.has(message)) {
+		vscode.window.showWarningMessage(message, t("kilocode:checkpoints.dismissWarning"))
+		warningsShown.add(message)
+	}
+}
+// kilocode_change end
+
 export abstract class ShadowCheckpointService extends EventEmitter {
 	public readonly taskId: string
 	public readonly checkpointsDir: string
@@ -38,6 +61,10 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		return !!this.git
 	}
 
+	public getCheckpoints(): string[] {
+		return this._checkpoints.slice()
+	}
+
 	constructor(taskId: string, checkpointsDir: string, workspaceDir: string, log: (message: string) => void) {
 		super()
 
@@ -48,6 +75,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		const protectedPaths = [homedir, desktopPath, documentsPath, downloadsPath]
 
 		if (protectedPaths.includes(workspaceDir)) {
+			showWarning(t("kilocode:checkpoints.protectedPaths", { workspaceDir })) // kilocode_change
 			throw new Error(`Cannot use checkpoints in ${workspaceDir}`)
 		}
 
@@ -67,6 +95,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		const hasNestedGitRepos = await this.hasNestedGitRepositories()
 
 		if (hasNestedGitRepos) {
+			showWarning(t("kilocode:checkpoints.nestedGitRepos")) // kilocode_change
 			throw new Error(
 				"Checkpoints are disabled because nested git repositories were detected in the workspace. " +
 					"Please remove or relocate nested git repositories to use the checkpoints feature.",
@@ -146,6 +175,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			this.log(
 				`[${this.constructor.name}#stageAll] failed to add files to git: ${error instanceof Error ? error.message : String(error)}`,
 			)
+			reportError(`${this.constructor.name}#stageAll`, error) // kilocode_change
 		}
 	}
 
@@ -174,6 +204,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			this.log(
 				`[${this.constructor.name}#hasNestedGitRepositories] failed to check for nested git repos: ${error instanceof Error ? error.message : String(error)}`,
 			)
+			reportError(`${this.constructor.name}#hasNestedGitRepositories`, error) // kilocode_change
 
 			// If we can't check, assume there are no nested repos to avoid blocking the feature.
 			return false
@@ -188,6 +219,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 				this.log(
 					`[${this.constructor.name}#getShadowGitConfigWorktree] failed to get core.worktree: ${error instanceof Error ? error.message : String(error)}`,
 				)
+				reportError(`${this.constructor.name}#getShadowGitConfigWorktree`, error) // kilocode_change
 			}
 		}
 
@@ -196,7 +228,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 
 	public async saveCheckpoint(
 		message: string,
-		options?: { allowEmpty?: boolean },
+		options?: { allowEmpty?: boolean; suppressMessage?: boolean },
 	): Promise<CheckpointResult | undefined> {
 		try {
 			this.log(
@@ -211,14 +243,19 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 			await this.stageAll(this.git)
 			const commitArgs = options?.allowEmpty ? { "--allow-empty": null } : undefined
 			const result = await this.git.commit(message, commitArgs)
-			const isFirst = this._checkpoints.length === 0
 			const fromHash = this._checkpoints[this._checkpoints.length - 1] ?? this.baseHash!
 			const toHash = result.commit || fromHash
 			this._checkpoints.push(toHash)
 			const duration = Date.now() - startTime
 
-			if (isFirst || result.commit) {
-				this.emit("checkpoint", { type: "checkpoint", isFirst, fromHash, toHash, duration })
+			if (result.commit) {
+				this.emit("checkpoint", {
+					type: "checkpoint",
+					fromHash,
+					toHash,
+					duration,
+					suppressMessage: options?.suppressMessage ?? false,
+				})
 			}
 
 			if (result.commit) {
@@ -290,11 +327,20 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 		for (const file of files) {
 			const relPath = file.file
 			const absPath = path.join(cwdPath, relPath)
-			const before = await this.git.show([`${from}:${relPath}`]).catch(() => "")
+			const before = await this.git.show([`${from}:${relPath}`]).catch((err) => {
+				reportError(`[${this.constructor.name}#getDiff:git.show:before`, err) // kilocode_change
+				return ""
+			})
 
 			const after = to
-				? await this.git.show([`${to}:${relPath}`]).catch(() => "")
-				: await fs.readFile(absPath, "utf8").catch(() => "")
+				? await this.git.show([`${to}:${relPath}`]).catch((err) => {
+						reportError(`[${this.constructor.name}#getDiff:git.show:after`, err) // kilocode_change
+						return ""
+					})
+				: await fs.readFile(absPath, "utf8").catch((err) => {
+						reportError(`[${this.constructor.name}#getDiff:readFile`, err) // kilocode_change
+						return ""
+					})
 
 			result.push({ paths: { relative: relPath, absolute: absPath }, content: { before, after } })
 		}
@@ -399,6 +445,7 @@ export abstract class ShadowCheckpointService extends EventEmitter {
 				console.error(
 					`[${this.constructor.name}#deleteBranch] failed to delete branch ${branchName}: ${error instanceof Error ? error.message : String(error)}`,
 				)
+				reportError(`${this.constructor.name}#deleteBranch`, error) // kilocode_change
 
 				return false
 			} finally {

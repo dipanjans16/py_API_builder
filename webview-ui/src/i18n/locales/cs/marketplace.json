@@ -33,7 +33,17 @@
 			"selected": "Zobrazeny položky s jakýmkoli z vybraných štítků",
 			"clickToFilter": "Klikni na štítky pro filtrování položek"
 		},
+		"installed": {
+			"label": "Filtrovat podle stavu",
+			"all": "Všechny položky",
+			"installed": "Nainstalováno",
+			"notInstalled": "Nenainstalováno"
+		},
 		"none": "Žádné"
+	},
+	"sections": {
+		"organizationMcps": "{{organization}} MCPs",
+		"marketplace": "Marketplace"
 	},
 	"type-group": {
 		"modes": "Modes",
@@ -71,7 +81,9 @@
 			"removeProjectTooltip": "Odebrat z aktuálního projektu",
 			"removeGlobalTooltip": "Odebrat z globální konfigurace",
 			"actionsMenuLabel": "Další akce"
-		}
+		},
+		"removeFailed": "Nepodařilo se odebrat položku: {{error}}",
+		"unknownError": "Došlo k neznámé chybě"
 	},
 	"install": {
 		"title": "Nainstalovat {{name}}",
@@ -124,6 +136,19 @@
 			"emojiName": "Emoji znaky mohou způsobit problémy se zobrazením",
 			"maxSources": "Povoleno maximálně {{max}} zdrojů"
 		}
+	},
+	"removeConfirm": {
+		"mode": {
+			"title": "Odebrat Mode",
+			"message": "Jsi si jistý, že chceš odebrat mode \"{{modeName}}\"?",
+			"rulesWarning": "Toto také odebere všechny související soubory pravidel pro tento mode."
+		},
+		"mcp": {
+			"title": "Odebrat MCP Server",
+			"message": "Jsi si jistý, že chceš odebrat MCP server \"{{mcpName}}\"?"
+		},
+		"cancel": "Zrušit",
+		"confirm": "Odebrat"
 	},
 	"footer": {
 		"issueText": "Našel jsi problém s položkou marketplace nebo máš návrhy na nové? <0>Otevři GitHub issue</0> a dej nám vědět!"

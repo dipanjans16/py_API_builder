@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useContext } from "react"
 import { Button } from "@/components/ui/button"
 import { Tab, TabContent, TabHeader } from "../common/Tab"
 import { MarketplaceViewStateManager } from "./MarketplaceViewStateManager"
@@ -8,16 +8,32 @@ import { vscode } from "@/utils/vscode"
 import { MarketplaceListView } from "./MarketplaceListView"
 import { cn } from "@/lib/utils"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { ExtensionStateContext } from "@/context/ExtensionStateContext"
 
 interface MarketplaceViewProps {
 	onDone?: () => void
 	stateManager: MarketplaceViewStateManager
 	targetTab?: "mcp" | "mode"
+	hideHeader?: boolean // kilocode_change
 }
-export function MarketplaceView({ stateManager, onDone, targetTab }: MarketplaceViewProps) {
+export function MarketplaceView({ stateManager, onDone, targetTab, hideHeader = false }: MarketplaceViewProps) {
 	const { t } = useAppTranslation()
 	const [state, manager] = useStateManager(stateManager)
 	const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false)
+	const extensionState = useContext(ExtensionStateContext)
+	const [lastOrganizationSettingsVersion, setLastOrganizationSettingsVersion] = useState<number>(
+		extensionState?.organizationSettingsVersion ?? -1,
+	)
+
+	useEffect(() => {
+		const currentVersion = extensionState?.organizationSettingsVersion ?? -1
+		if (currentVersion !== lastOrganizationSettingsVersion) {
+			vscode.postMessage({
+				type: "fetchMarketplaceData",
+			})
+		}
+		setLastOrganizationSettingsVersion(currentVersion)
+	}, [extensionState?.organizationSettingsVersion, lastOrganizationSettingsVersion])
 
 	// Track when we receive the initial state
 	useEffect(() => {
@@ -84,8 +100,10 @@ export function MarketplaceView({ stateManager, onDone, targetTab }: Marketplace
 		<TooltipProvider delayDuration={300}>
 			{/* kilocode_change: add className relative */}
 			<Tab className="relative">
-				{/*  kilocode_change: do not display tabheader */}
-				<TabHeader style={{ display: "none" }} className="flex flex-col sticky top-0 z-10 px-3 py-2">
+				{/*  kilocode_change: display header conditionally */}
+				<TabHeader
+					style={{ display: hideHeader ? "none" : "flex" }}
+					className="flex flex-col sticky top-0 z-10 px-3 py-2 bg-vscode-sideBar-background">
 					<div className="flex justify-between items-center px-2">
 						<h3 className="font-bold m-0">{t("marketplace:title")}</h3>
 						<div className="flex gap-2 items-center">

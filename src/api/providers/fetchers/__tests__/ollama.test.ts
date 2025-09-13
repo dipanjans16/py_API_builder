@@ -1,6 +1,5 @@
 import axios from "axios"
-import path from "path"
-import { vi, describe, it, expect, beforeEach } from "vitest"
+
 import { getOllamaModels, parseOllamaModel } from "../ollama"
 import ollamaModelsData from "./fixtures/ollama-model-details.json"
 
@@ -19,8 +18,8 @@ describe("Ollama Fetcher", () => {
 			const parsedModel = parseOllamaModel(modelData)
 
 			expect(parsedModel).toEqual({
-				maxTokens: 40960,
-				contextWindow: 40960,
+				maxTokens: 4096, // kilocode_change
+				contextWindow: 4096, // kilocode_change
 				supportsImages: false,
 				supportsComputerUse: false,
 				supportsPromptCache: true,
@@ -28,7 +27,7 @@ describe("Ollama Fetcher", () => {
 				outputPrice: 0,
 				cacheWritesPrice: 0,
 				cacheReadsPrice: 0,
-				description: "Family: qwen3, Context: 40960, Size: 32.8B",
+				description: "Family: qwen3, Context: 4096, Size: 32.8B", // kilocode_change
 			})
 		})
 
@@ -44,8 +43,8 @@ describe("Ollama Fetcher", () => {
 			const parsedModel = parseOllamaModel(modelDataWithNullFamilies as any)
 
 			expect(parsedModel).toEqual({
-				maxTokens: 40960,
-				contextWindow: 40960,
+				maxTokens: 4096, // kilocode_change
+				contextWindow: 4096, // kilocode_change
 				supportsImages: false,
 				supportsComputerUse: false,
 				supportsPromptCache: true,
@@ -53,7 +52,7 @@ describe("Ollama Fetcher", () => {
 				outputPrice: 0,
 				cacheWritesPrice: 0,
 				cacheReadsPrice: 0,
-				description: "Family: qwen3, Context: 40960, Size: 32.8B",
+				description: "Family: qwen3, Context: 4096, Size: 32.8B", // kilocode_change
 			})
 		})
 	})

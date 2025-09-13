@@ -175,6 +175,18 @@ export const vertexModels = {
 		cacheReadsPrice: 0.3,
 		supportsReasoningBudget: true,
 	},
+	"claude-opus-4-1@20250805": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
+		supportsComputerUse: true,
+		supportsPromptCache: true,
+		inputPrice: 15.0,
+		outputPrice: 75.0,
+		cacheWritesPrice: 18.75,
+		cacheReadsPrice: 1.5,
+		supportsReasoningBudget: true,
+	},
 	"claude-opus-4@20250514": {
 		maxTokens: 8192,
 		contextWindow: 200_000,
@@ -272,6 +284,15 @@ export const vertexModels = {
 		cacheWritesPrice: 1.0,
 		maxThinkingTokens: 24_576,
 		supportsReasoningBudget: true,
+	},
+	"llama-4-maverick-17b-128e-instruct-maas": {
+		maxTokens: 8192,
+		contextWindow: 131072,
+		supportsImages: false,
+		supportsPromptCache: false,
+		inputPrice: 0.35,
+		outputPrice: 1.15,
+		description: "Meta Llama 4 Maverick 17B Instruct model, 128K context.",
 	},
 } as const satisfies Record<string, ModelInfo>
 
